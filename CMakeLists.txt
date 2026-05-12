@@ -12,8 +12,12 @@ qt_standard_project_setup()
 
 add_executable(AtlasTranslator
     main.cpp
+    core/AtlasImporter.cpp
+    core/AtlasImporter.h
     core/DatabaseManager.cpp
     core/DatabaseManager.h
+    core/DatasetScanner.cpp
+    core/DatasetScanner.h
     core/Tokenizer.cpp
     core/Tokenizer.h
     core/TranslatorEngine.cpp

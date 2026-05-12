@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringList>
 #include <QVariant>
 #include <QUuid>
 
@@ -56,7 +57,7 @@ bool DatabaseManager::initialize()
         return false;
     }
 
-    return createTables() && seedInitialTranslations();
+    return createTables() && createIndexes() && seedInitialTranslations();
 }
 
 std::optional<QString> DatabaseManager::findTranslation(const QString &sourceText,
@@ -116,6 +117,26 @@ bool DatabaseManager::createTables()
     }
 
     return ok;
+}
+
+bool DatabaseManager::createIndexes()
+{
+    const QStringList statements = {
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_text ON translations(source_text)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_lang ON translations(source_lang)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_target_lang ON translations(target_lang)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_lookup ON translations(source_text, source_lang, target_lang)")
+    };
+
+    for (const QString &statement : statements) {
+        QSqlQuery query(m_database);
+        if (!query.exec(statement)) {
+            m_lastError = query.lastError().text();
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool DatabaseManager::seedInitialTranslations()

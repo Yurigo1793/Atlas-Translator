@@ -22,6 +22,7 @@ public:
 
 private:
     bool createTables();
+    bool createIndexes();
     bool seedInitialTranslations();
     bool insertTranslation(const QString &sourceText,
                            const QString &translatedText,
