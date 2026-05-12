@@ -1,10 +1,11 @@
 #include "AtlasImporter.h"
 
+#include "TextNormalizer.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStringConverter>
@@ -256,14 +257,14 @@ bool AtlasImporter::shouldImportLine(const QString &sourceText, const QString &t
 
 QString AtlasImporter::cleanText(const QString &text) const
 {
-    QString cleaned = text.simplified();
-    cleaned.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
-    return cleaned.trimmed();
+    static const TextNormalizer normalizer;
+    return normalizer.normalizeWhitespace(text);
 }
 
 QString AtlasImporter::normalizedSourceText(const QString &text) const
 {
-    return cleanText(text).toLower();
+    static const TextNormalizer normalizer;
+    return normalizer.normalizeForLookup(text);
 }
 
 void AtlasImporter::printProgress() const

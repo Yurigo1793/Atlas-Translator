@@ -20,6 +20,8 @@ add_executable(AtlasTranslator
     core/DatasetScanner.h
     core/Tokenizer.cpp
     core/Tokenizer.h
+    core/TextNormalizer.cpp
+    core/TextNormalizer.h
     core/TranslatorEngine.cpp
     core/TranslatorEngine.h
 )
