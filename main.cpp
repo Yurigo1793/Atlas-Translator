@@ -134,5 +134,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    translator.printStatistics(output);
+
     return 0;
 }

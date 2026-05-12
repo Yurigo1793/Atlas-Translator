@@ -1,5 +1,7 @@
 #include "DatabaseManager.h"
 
+#include "TextNormalizer.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -64,28 +66,64 @@ std::optional<QString> DatabaseManager::findTranslation(const QString &sourceTex
                                                         const QString &sourceLang,
                                                         const QString &targetLang) const
 {
+    const QHash<QString, QString> translations = findTranslations(QStringList{sourceText}, sourceLang, targetLang);
+    const QString normalizedSourceText = normalizedText(sourceText);
+    if (translations.contains(normalizedSourceText)) {
+        return translations.value(normalizedSourceText);
+    }
+
+    return std::nullopt;
+}
+
+QHash<QString, QString> DatabaseManager::findTranslations(const QStringList &sourceTexts,
+                                                          const QString &sourceLang,
+                                                          const QString &targetLang) const
+{
+    QHash<QString, QString> results;
+    QStringList normalizedSources;
+    normalizedSources.reserve(sourceTexts.size());
+
+    for (const QString &sourceText : sourceTexts) {
+        const QString normalizedSource = normalizedText(sourceText);
+        if (!normalizedSource.isEmpty() && !normalizedSources.contains(normalizedSource)) {
+            normalizedSources.append(normalizedSource);
+        }
+    }
+
+    if (normalizedSources.isEmpty()) {
+        return results;
+    }
+
+    QStringList placeholders;
+    placeholders.reserve(normalizedSources.size());
+    for (qsizetype index = 0; index < normalizedSources.size(); ++index) {
+        placeholders.append(QStringLiteral(":source_%1").arg(index));
+    }
+
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(R"(
-        SELECT translated_text
+        SELECT source_text, translated_text
         FROM translations
-        WHERE source_text = :source_text
-          AND source_lang = :source_lang
+        WHERE source_lang = :source_lang
           AND target_lang = :target_lang
-        LIMIT 1
-    )"));
-    query.bindValue(QStringLiteral(":source_text"), normalizedText(sourceText));
+          AND source_text IN (%1)
+    )").arg(placeholders.join(QStringLiteral(", "))));
+
+    for (qsizetype index = 0; index < normalizedSources.size(); ++index) {
+        query.bindValue(placeholders.at(index), normalizedSources.at(index));
+    }
     query.bindValue(QStringLiteral(":source_lang"), sourceLang.toLower());
     query.bindValue(QStringLiteral(":target_lang"), targetLang.toLower());
 
     if (!query.exec()) {
-        return std::nullopt;
+        return results;
     }
 
-    if (query.next()) {
-        return query.value(0).toString();
+    while (query.next()) {
+        results.insert(query.value(0).toString(), query.value(1).toString());
     }
 
-    return std::nullopt;
+    return results;
 }
 
 QString DatabaseManager::lastError() const
@@ -144,7 +182,10 @@ bool DatabaseManager::seedInitialTranslations()
     return insertTranslation(QStringLiteral("hello"), QStringLiteral("olá"), QStringLiteral("en"), QStringLiteral("pt"))
         && insertTranslation(QStringLiteral("world"), QStringLiteral("mundo"), QStringLiteral("en"), QStringLiteral("pt"))
         && insertTranslation(QStringLiteral("good morning"), QStringLiteral("bom dia"), QStringLiteral("en"), QStringLiteral("pt"))
-        && insertTranslation(QStringLiteral("how are you"), QStringLiteral("como você está"), QStringLiteral("en"), QStringLiteral("pt"));
+        && insertTranslation(QStringLiteral("how are you"), QStringLiteral("como você está"), QStringLiteral("en"), QStringLiteral("pt"))
+        && insertTranslation(QStringLiteral("open"), QStringLiteral("abrir"), QStringLiteral("en"), QStringLiteral("pt"))
+        && insertTranslation(QStringLiteral("open file"), QStringLiteral("abrir arquivo"), QStringLiteral("en"), QStringLiteral("pt"))
+        && insertTranslation(QStringLiteral("open the file"), QStringLiteral("abrir o arquivo"), QStringLiteral("en"), QStringLiteral("pt"));
 }
 
 bool DatabaseManager::insertTranslation(const QString &sourceText,
@@ -172,5 +213,6 @@ bool DatabaseManager::insertTranslation(const QString &sourceText,
 
 QString DatabaseManager::normalizedText(const QString &text) const
 {
-    return text.simplified().toLower();
+    static const TextNormalizer normalizer;
+    return normalizer.normalizeForLookup(text);
 }
