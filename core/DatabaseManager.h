@@ -3,6 +3,8 @@
 
 #include <QSqlDatabase>
 #include <QString>
+#include <QStringList>
+#include <QHash>
 #include <optional>
 
 class DatabaseManager
@@ -16,6 +18,9 @@ public:
     std::optional<QString> findTranslation(const QString &sourceText,
                                            const QString &sourceLang,
                                            const QString &targetLang) const;
+    QHash<QString, QString> findTranslations(const QStringList &sourceTexts,
+                                             const QString &sourceLang,
+                                             const QString &targetLang) const;
 
     QString lastError() const;
     QString databasePath() const;
