@@ -2,6 +2,7 @@
 
 #include "TextNormalizer.h"
 #include "AppPaths.h"
+#include "Utf8Streams.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -10,7 +11,6 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QRegularExpression>
-#include <QStringConverter>
 #include <QStringList>
 #include <QTextStream>
 #include <QUuid>
@@ -76,12 +76,11 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
 
     QTextStream sourceStream(&sourceFile);
     QTextStream targetStream(&targetFile);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    sourceStream.setEncoding(QStringConverter::Utf8);
-    targetStream.setEncoding(QStringConverter::Utf8);
-#endif
+    configureUtf8Stream(sourceStream);
+    configureUtf8Stream(targetStream);
 
     QTextStream console(stdout);
+    configureUtf8Stream(console);
     console << "Importando..." << Qt::endl;
     console << "Idiomas: " << normalizedSourceLang << " -> " << normalizedTargetLang << Qt::endl;
 
@@ -632,6 +631,7 @@ QString AtlasImporter::normalizedSourceText(const QString &text) const
 void AtlasImporter::printProgress() const
 {
     QTextStream console(stdout);
+    configureUtf8Stream(console);
     console << "Linhas retomadas: " << m_stats.resumedLines << Qt::endl;
     console << "Linhas processadas: " << m_stats.processedLines << Qt::endl;
     console << "Inseridas: " << m_stats.insertedLines << Qt::endl;
