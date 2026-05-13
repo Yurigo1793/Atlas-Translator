@@ -50,11 +50,8 @@ public:
 private:
     bool createTables();
     bool createIndexes();
-    bool seedInitialTranslations();
-    bool insertTranslation(const QString &sourceText,
-                           const QString &translatedText,
-                           const QString &sourceLang,
-                           const QString &targetLang);
+    bool ensureLookupIndex();
+    bool removeLegacyUniqueConstraint();
     bool normalizeStoredLanguages();
     bool tableExists(const QString &tableName) const;
 

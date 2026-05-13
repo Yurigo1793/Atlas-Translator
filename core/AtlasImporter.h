@@ -37,6 +37,8 @@ private:
     bool openDatabase();
     bool ensureSchema();
     bool ensureIndexes();
+    bool ensureLookupIndex();
+    bool removeLegacyUniqueConstraint();
     bool ensureProgressTable();
     bool prepareInsertStatement(QSqlQuery &query);
     bool shouldImportLine(const QString &sourceText, const QString &targetText) const;

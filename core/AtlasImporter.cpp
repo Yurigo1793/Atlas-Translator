@@ -138,9 +138,6 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
 
             if (insertQuery.numRowsAffected() > 0) {
                 ++m_stats.insertedLines;
-            } else {
-                ++m_stats.duplicateLines;
-                ++m_stats.ignoredLines;
             }
         }
 
@@ -260,15 +257,14 @@ bool AtlasImporter::ensureSchema()
             source_text TEXT NOT NULL,
             translated_text TEXT NOT NULL,
             source_lang TEXT NOT NULL,
-            target_lang TEXT NOT NULL,
-            UNIQUE(source_text, source_lang, target_lang)
+            target_lang TEXT NOT NULL
         )
     )"))) {
         m_lastError = query.lastError().text();
         return false;
     }
 
-    return ensureIndexes() && ensureProgressTable();
+    return removeLegacyUniqueConstraint() && ensureIndexes() && ensureProgressTable();
 }
 
 bool AtlasImporter::ensureIndexes()
@@ -276,8 +272,7 @@ bool AtlasImporter::ensureIndexes()
     const QStringList statements = {
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_text ON translations(source_text)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_lang ON translations(source_lang)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_target_lang ON translations(target_lang)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_lookup ON translations(source_text, source_lang, target_lang)")
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_target_lang ON translations(target_lang)")
     };
 
     for (const QString &statement : statements) {
@@ -286,6 +281,108 @@ bool AtlasImporter::ensureIndexes()
             m_lastError = query.lastError().text();
             return false;
         }
+    }
+
+    return ensureLookupIndex();
+}
+
+bool AtlasImporter::ensureLookupIndex()
+{
+    QStringList indexedColumns;
+    QSqlQuery indexInfo(m_database);
+    if (indexInfo.exec(QStringLiteral("PRAGMA index_info(idx_translations_lookup)"))) {
+        while (indexInfo.next()) {
+            indexedColumns.append(indexInfo.value(2).toString());
+        }
+    } else {
+        m_lastError = indexInfo.lastError().text();
+        return false;
+    }
+
+    const QStringList expectedColumns = {
+        QStringLiteral("source_lang"),
+        QStringLiteral("target_lang"),
+        QStringLiteral("source_text")
+    };
+
+    if (!indexedColumns.isEmpty() && indexedColumns != expectedColumns) {
+        QSqlQuery dropQuery(m_database);
+        if (!dropQuery.exec(QStringLiteral("DROP INDEX idx_translations_lookup"))) {
+            m_lastError = dropQuery.lastError().text();
+            return false;
+        }
+        indexedColumns.clear();
+    }
+
+    if (indexedColumns.isEmpty()) {
+        QSqlQuery createQuery(m_database);
+        if (!createQuery.exec(QStringLiteral(
+                "CREATE INDEX idx_translations_lookup ON translations(source_lang, target_lang, source_text)"))) {
+            m_lastError = createQuery.lastError().text();
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool AtlasImporter::removeLegacyUniqueConstraint()
+{
+    QSqlQuery schemaQuery(m_database);
+    schemaQuery.prepare(QStringLiteral("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"));
+    schemaQuery.bindValue(QStringLiteral(":name"), QStringLiteral("translations"));
+    if (!schemaQuery.exec() || !schemaQuery.next()) {
+        m_lastError = schemaQuery.lastError().text();
+        return false;
+    }
+
+    QString tableSql = schemaQuery.value(0).toString().toLower();
+    tableSql.remove(QChar::Space);
+    tableSql.remove(QChar::Tabulation);
+    tableSql.remove(QChar::LineFeed);
+    tableSql.remove(QChar::CarriageReturn);
+
+    if (!tableSql.contains(QStringLiteral("unique(source_text,source_lang,target_lang)"))) {
+        return true;
+    }
+
+    if (!m_database.transaction()) {
+        m_lastError = m_database.lastError().text();
+        return false;
+    }
+
+    QSqlQuery query(m_database);
+    const QStringList migrationStatements = {
+        QStringLiteral("DROP TABLE IF EXISTS translations_without_unique"),
+        QStringLiteral(R"(
+            CREATE TABLE translations_without_unique (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_text TEXT NOT NULL,
+                translated_text TEXT NOT NULL,
+                source_lang TEXT NOT NULL,
+                target_lang TEXT NOT NULL
+            )
+        )"),
+        QStringLiteral(R"(
+            INSERT INTO translations_without_unique (id, source_text, translated_text, source_lang, target_lang)
+            SELECT id, source_text, translated_text, source_lang, target_lang
+            FROM translations
+        )"),
+        QStringLiteral("DROP TABLE translations"),
+        QStringLiteral("ALTER TABLE translations_without_unique RENAME TO translations")
+    };
+
+    for (const QString &statement : migrationStatements) {
+        if (!query.exec(statement)) {
+            m_lastError = query.lastError().text();
+            m_database.rollback();
+            return false;
+        }
+    }
+
+    if (!m_database.commit()) {
+        m_lastError = m_database.lastError().text();
+        return false;
     }
 
     return true;
@@ -316,7 +413,7 @@ bool AtlasImporter::ensureProgressTable()
 bool AtlasImporter::prepareInsertStatement(QSqlQuery &query)
 {
     if (!query.prepare(QStringLiteral(R"(
-        INSERT OR IGNORE INTO translations (source_text, translated_text, source_lang, target_lang)
+        INSERT INTO translations (source_text, translated_text, source_lang, target_lang)
         VALUES (:source_text, :translated_text, :source_lang, :target_lang)
     )"))) {
         m_lastError = query.lastError().text();
