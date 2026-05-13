@@ -7,8 +7,21 @@
 #include <QTextStream>
 
 namespace {
+QString readLanguage(QTextStream &input,
+                     QTextStream &output,
+                     const QString &label,
+                     const QString &defaultLanguage)
+{
+    output << label << " [" << defaultLanguage << "]: " << Qt::flush;
+    const QString language = input.readLine().trimmed();
+    return language.isEmpty() ? defaultLanguage : language;
+}
+
 void translateText(TranslatorEngine &translator, QTextStream &input, QTextStream &output)
 {
+    const QString sourceLang = readLanguage(input, output, QStringLiteral("Idioma de origem"), QStringLiteral("en"));
+    const QString targetLang = readLanguage(input, output, QStringLiteral("Idioma de destino"), QStringLiteral("pt_BR"));
+
     output << "Digite o texto para traduzir (ou 'exit' para voltar):" << Qt::endl;
 
     while (true) {
@@ -19,7 +32,34 @@ void translateText(TranslatorEngine &translator, QTextStream &input, QTextStream
             break;
         }
 
-        output << translator.translate(line) << Qt::endl;
+        const TranslatorEngine::TranslationResult result = translator.translateDetailed(line, sourceLang, targetLang);
+        output << result.translation << Qt::endl;
+        output << "Tempo: " << QString::number(static_cast<double>(result.translationTimeNs) / 1000000.0, 'f', 3)
+               << " ms | Tipo: " << result.matchType << Qt::endl;
+    }
+}
+
+void runInternalTests(TranslatorEngine &translator, QTextStream &input, QTextStream &output)
+{
+    const QString sourceLang = readLanguage(input, output, QStringLiteral("Idioma de origem dos testes"), QStringLiteral("en"));
+    const QString targetLang = readLanguage(input, output, QStringLiteral("Idioma de destino dos testes"), QStringLiteral("pt_BR"));
+    const QStringList samples = {
+        QStringLiteral("open"),
+        QStringLiteral("open file"),
+        QStringLiteral("open the file"),
+        QStringLiteral("save"),
+        QStringLiteral("delete"),
+        QStringLiteral("network settings")
+    };
+
+    output << "Testes internos da engine:" << Qt::endl;
+    for (const QString &sample : samples) {
+        const TranslatorEngine::TranslationResult result = translator.translateDetailed(sample, sourceLang, targetLang);
+        output << "- " << sample << " => " << result.translation
+               << " | tempo: " << QString::number(static_cast<double>(result.translationTimeNs) / 1000000.0, 'f', 3) << " ms"
+               << " | tipo: " << result.matchType
+               << " | match: " << (result.matchedText.isEmpty() ? QStringLiteral("none") : result.matchedText)
+               << Qt::endl;
     }
 }
 
@@ -111,6 +151,8 @@ int main(int argc, char *argv[])
         output << "1 - Traduzir texto" << Qt::endl;
         output << "2 - Escanear datasets" << Qt::endl;
         output << "3 - Importar dataset detectado" << Qt::endl;
+        output << "4 - Rodar testes internos" << Qt::endl;
+        output << "5 - Alternar debug detalhado" << Qt::endl;
         output << "0 - Sair" << Qt::endl;
         output << "Escolha: " << Qt::flush;
 
@@ -129,6 +171,11 @@ int main(int argc, char *argv[])
                 detectedDatasets = scanDatasets(scanner, output);
             }
             importDetectedDataset(detectedDatasets, input, output);
+        } else if (option == QStringLiteral("4")) {
+            runInternalTests(translator, input, output);
+        } else if (option == QStringLiteral("5")) {
+            translator.setDebugEnabled(!translator.debugEnabled());
+            output << "Debug detalhado: " << (translator.debugEnabled() ? QStringLiteral("ON") : QStringLiteral("OFF")) << Qt::endl;
         } else {
             output << "Opção inválida." << Qt::endl;
         }

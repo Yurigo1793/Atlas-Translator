@@ -50,7 +50,7 @@ QStringList TextNormalizer::lookupCandidates(const QStringList &words) const
     }
 
     const QString compactPhrase = normalizeForLookup(compactWords.join(QStringLiteral(" ")));
-    if (!compactPhrase.isEmpty() && !candidates.contains(compactPhrase)) {
+    if (compactWords.size() >= 2 && !compactPhrase.isEmpty() && !candidates.contains(compactPhrase)) {
         candidates.append(compactPhrase);
     }
 

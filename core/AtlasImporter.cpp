@@ -3,6 +3,7 @@
 #include "TextNormalizer.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -18,6 +19,7 @@ namespace {
 constexpr qsizetype MaximumLineLength = 500;
 constexpr qsizetype MinimumLineLength = 2;
 constexpr qint64 ProgressInterval = 10000;
+constexpr qint64 CommitInterval = 10000;
 }
 
 AtlasImporter::AtlasImporter(const QString &databasePath)
@@ -50,6 +52,10 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
     m_stats = ImportStats();
     m_lastError.clear();
 
+    const QString normalizedSourceLang = m_languageNormalizer.normalize(sourceLang);
+    const QString normalizedTargetLang = m_languageNormalizer.normalize(targetLang);
+    const QString currentImportKey = importKey(sourceFilePath, targetFilePath, normalizedSourceLang, normalizedTargetLang);
+
     QFile sourceFile(sourceFilePath);
     QFile targetFile(targetFilePath);
 
@@ -67,11 +73,6 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
         return false;
     }
 
-    QSqlQuery insertQuery(m_database);
-    if (!prepareInsertStatement(insertQuery)) {
-        return false;
-    }
-
     QTextStream sourceStream(&sourceFile);
     QTextStream targetStream(&targetFile);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -81,6 +82,32 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
 
     QTextStream console(stdout);
     console << "Importando..." << Qt::endl;
+    console << "Idiomas: " << normalizedSourceLang << " -> " << normalizedTargetLang << Qt::endl;
+
+    qint64 resumeFromLine = 0;
+    bool completed = false;
+    if (!loadProgress(currentImportKey, resumeFromLine, completed)) {
+        return false;
+    }
+
+    if (completed) {
+        console << "Dataset já importado anteriormente. Nada a fazer." << Qt::endl;
+        return true;
+    }
+
+    if (resumeFromLine > 0) {
+        console << "Retomando importação da linha: " << resumeFromLine << Qt::endl;
+        if (!skipLines(sourceStream, targetStream, resumeFromLine)) {
+            return false;
+        }
+        m_stats.resumedLines = resumeFromLine;
+        m_stats.processedLines = resumeFromLine;
+    }
+
+    QSqlQuery insertQuery(m_database);
+    if (!prepareInsertStatement(insertQuery)) {
+        return false;
+    }
 
     if (!m_database.transaction()) {
         m_lastError = m_database.lastError().text();
@@ -88,45 +115,79 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
     }
 
     bool success = true;
+    qint64 linesSinceCommit = 0;
     while (!sourceStream.atEnd() && !targetStream.atEnd()) {
         const QString sourceText = cleanText(sourceStream.readLine());
         const QString targetText = cleanText(targetStream.readLine());
         ++m_stats.processedLines;
+        ++linesSinceCommit;
 
         if (!shouldImportLine(sourceText, targetText)) {
             ++m_stats.ignoredLines;
-            if ((m_stats.processedLines % ProgressInterval) == 0) {
-                printProgress();
-            }
-            continue;
-        }
-
-        insertQuery.bindValue(QStringLiteral(":source_text"), normalizedSourceText(sourceText));
-        insertQuery.bindValue(QStringLiteral(":translated_text"), targetText);
-        insertQuery.bindValue(QStringLiteral(":source_lang"), sourceLang.toLower());
-        insertQuery.bindValue(QStringLiteral(":target_lang"), targetLang.toLower());
-
-        if (!insertQuery.exec()) {
-            m_lastError = insertQuery.lastError().text();
-            success = false;
-            break;
-        }
-
-        if (insertQuery.numRowsAffected() > 0) {
-            ++m_stats.insertedLines;
         } else {
-            ++m_stats.duplicateLines;
-            ++m_stats.ignoredLines;
+            insertQuery.bindValue(QStringLiteral(":source_text"), normalizedSourceText(sourceText));
+            insertQuery.bindValue(QStringLiteral(":translated_text"), targetText);
+            insertQuery.bindValue(QStringLiteral(":source_lang"), normalizedSourceLang);
+            insertQuery.bindValue(QStringLiteral(":target_lang"), normalizedTargetLang);
+
+            if (!insertQuery.exec()) {
+                m_lastError = insertQuery.lastError().text();
+                success = false;
+                break;
+            }
+
+            if (insertQuery.numRowsAffected() > 0) {
+                ++m_stats.insertedLines;
+            } else {
+                ++m_stats.duplicateLines;
+                ++m_stats.ignoredLines;
+            }
         }
 
         if ((m_stats.processedLines % ProgressInterval) == 0) {
             printProgress();
+        }
+
+        if (linesSinceCommit >= CommitInterval) {
+            if (!saveProgress(currentImportKey,
+                              sourceFilePath,
+                              targetFilePath,
+                              normalizedSourceLang,
+                              normalizedTargetLang,
+                              m_stats.processedLines,
+                              false)) {
+                success = false;
+                break;
+            }
+
+            if (!m_database.commit()) {
+                m_lastError = m_database.lastError().text();
+                success = false;
+                break;
+            }
+
+            if (!m_database.transaction()) {
+                m_lastError = m_database.lastError().text();
+                success = false;
+                break;
+            }
+            linesSinceCommit = 0;
         }
     }
 
     if (success && (sourceStream.atEnd() != targetStream.atEnd())) {
         m_lastError = QStringLiteral("Dataset desalinhado: os arquivos têm quantidades de linhas diferentes.");
         success = false;
+    }
+
+    if (success) {
+        success = saveProgress(currentImportKey,
+                               sourceFilePath,
+                               targetFilePath,
+                               normalizedSourceLang,
+                               normalizedTargetLang,
+                               m_stats.processedLines,
+                               true);
     }
 
     if (success && !m_database.commit()) {
@@ -142,6 +203,7 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
 
     printProgress();
     console << "Resumo final:" << Qt::endl;
+    console << "Linhas retomadas: " << m_stats.resumedLines << Qt::endl;
     console << "Linhas processadas: " << m_stats.processedLines << Qt::endl;
     console << "Inseridas: " << m_stats.insertedLines << Qt::endl;
     console << "Ignoradas: " << m_stats.ignoredLines << Qt::endl;
@@ -206,7 +268,7 @@ bool AtlasImporter::ensureSchema()
         return false;
     }
 
-    return ensureIndexes();
+    return ensureIndexes() && ensureProgressTable();
 }
 
 bool AtlasImporter::ensureIndexes()
@@ -224,6 +286,28 @@ bool AtlasImporter::ensureIndexes()
             m_lastError = query.lastError().text();
             return false;
         }
+    }
+
+    return true;
+}
+
+bool AtlasImporter::ensureProgressTable()
+{
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral(R"(
+        CREATE TABLE IF NOT EXISTS import_progress (
+            import_key TEXT PRIMARY KEY,
+            source_file TEXT NOT NULL,
+            target_file TEXT NOT NULL,
+            source_lang TEXT NOT NULL,
+            target_lang TEXT NOT NULL,
+            processed_lines INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    )"))) {
+        m_lastError = query.lastError().text();
+        return false;
     }
 
     return true;
@@ -255,6 +339,108 @@ bool AtlasImporter::shouldImportLine(const QString &sourceText, const QString &t
     return sourceText.size() >= MinimumLineLength && targetText.size() >= MinimumLineLength;
 }
 
+
+bool AtlasImporter::loadProgress(const QString &importKey, qint64 &processedLines, bool &completed)
+{
+    processedLines = 0;
+    completed = false;
+
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(R"(
+        SELECT processed_lines, completed
+        FROM import_progress
+        WHERE import_key = :import_key
+        LIMIT 1
+    )"));
+    query.bindValue(QStringLiteral(":import_key"), importKey);
+
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+
+    if (query.next()) {
+        processedLines = query.value(0).toLongLong();
+        completed = query.value(1).toInt() != 0;
+    }
+
+    return true;
+}
+
+bool AtlasImporter::saveProgress(const QString &importKey,
+                                 const QString &sourceFilePath,
+                                 const QString &targetFilePath,
+                                 const QString &sourceLang,
+                                 const QString &targetLang,
+                                 qint64 processedLines,
+                                 bool completed)
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(R"(
+        INSERT OR REPLACE INTO import_progress (
+            import_key,
+            source_file,
+            target_file,
+            source_lang,
+            target_lang,
+            processed_lines,
+            completed,
+            updated_at
+        ) VALUES (
+            :import_key,
+            :source_file,
+            :target_file,
+            :source_lang,
+            :target_lang,
+            :processed_lines,
+            :completed,
+            CURRENT_TIMESTAMP
+        )
+    )"));
+    query.bindValue(QStringLiteral(":import_key"), importKey);
+    query.bindValue(QStringLiteral(":source_file"), sourceFilePath);
+    query.bindValue(QStringLiteral(":target_file"), targetFilePath);
+    query.bindValue(QStringLiteral(":source_lang"), sourceLang);
+    query.bindValue(QStringLiteral(":target_lang"), targetLang);
+    query.bindValue(QStringLiteral(":processed_lines"), processedLines);
+    query.bindValue(QStringLiteral(":completed"), completed ? 1 : 0);
+
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool AtlasImporter::skipLines(QTextStream &sourceStream, QTextStream &targetStream, qint64 linesToSkip)
+{
+    for (qint64 line = 0; line < linesToSkip; ++line) {
+        if (sourceStream.atEnd() || targetStream.atEnd()) {
+            m_lastError = QStringLiteral("Progresso salvo aponta para além do fim do dataset.");
+            return false;
+        }
+
+        sourceStream.readLine();
+        targetStream.readLine();
+    }
+
+    return true;
+}
+
+QString AtlasImporter::importKey(const QString &sourceFilePath,
+                                 const QString &targetFilePath,
+                                 const QString &sourceLang,
+                                 const QString &targetLang) const
+{
+    const QString rawKey = QStringLiteral("%1|%2|%3|%4")
+                               .arg(QFileInfo(sourceFilePath).absoluteFilePath(),
+                                    QFileInfo(targetFilePath).absoluteFilePath(),
+                                    sourceLang,
+                                    targetLang);
+    return QString::fromLatin1(QCryptographicHash::hash(rawKey.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
 QString AtlasImporter::cleanText(const QString &text) const
 {
     static const TextNormalizer normalizer;
@@ -270,6 +456,7 @@ QString AtlasImporter::normalizedSourceText(const QString &text) const
 void AtlasImporter::printProgress() const
 {
     QTextStream console(stdout);
+    console << "Linhas retomadas: " << m_stats.resumedLines << Qt::endl;
     console << "Linhas processadas: " << m_stats.processedLines << Qt::endl;
     console << "Inseridas: " << m_stats.insertedLines << Qt::endl;
     console << "Ignoradas: " << m_stats.ignoredLines << Qt::endl;
