@@ -200,6 +200,7 @@ int main(int argc, char *argv[])
         if (option == QStringLiteral("1")) {
             translateText(translator, in, out);
         } else if (option == QStringLiteral("2")) {
+            translator.shutdown();
             importDetectedDataset(in, out);
             if (!translator.initialize()) {
                 out << "Erro ao recarregar banco após importação: " << translator.lastError() << Qt::endl;

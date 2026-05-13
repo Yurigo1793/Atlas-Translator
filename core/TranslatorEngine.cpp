@@ -247,6 +247,12 @@ bool TranslatorEngine::initialize()
     return initialized;
 }
 
+void TranslatorEngine::shutdown()
+{
+    m_ready = false;
+    m_databaseManager.close();
+}
+
 QString TranslatorEngine::translate(const QString &text,
                                     const QString &sourceLang,
                                     const QString &targetLang) const

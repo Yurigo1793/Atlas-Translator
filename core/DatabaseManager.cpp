@@ -38,13 +38,14 @@ DatabaseManager::DatabaseManager(const QString &databasePath)
 
 DatabaseManager::~DatabaseManager()
 {
+    close();
+}
+
+void DatabaseManager::close()
+{
     if (m_database.isValid()) {
         m_database.close();
-    }
-
-    m_database = QSqlDatabase();
-
-    if (!m_connectionName.isEmpty()) {
+        m_database = QSqlDatabase();
         QSqlDatabase::removeDatabase(m_connectionName);
     }
 }
@@ -56,9 +57,7 @@ bool DatabaseManager::open()
     }
 
     if (m_database.isValid()) {
-        m_database.close();
-        m_database = QSqlDatabase();
-        QSqlDatabase::removeDatabase(m_connectionName);
+        close();
     }
 
     const QFileInfo databaseInfo(m_databasePath);
@@ -77,9 +76,14 @@ bool DatabaseManager::open()
     }
 
     QSqlQuery pragmas(m_database);
+    pragmas.exec(QStringLiteral("PRAGMA busy_timeout = 10000"));
+    pragmas.finish();
     pragmas.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
+    pragmas.finish();
     pragmas.exec(QStringLiteral("PRAGMA journal_mode = WAL"));
+    pragmas.finish();
     pragmas.exec(QStringLiteral("PRAGMA synchronous = NORMAL"));
+    pragmas.finish();
 
     return true;
 }
@@ -472,6 +476,7 @@ bool DatabaseManager::ensureFrequencySchema()
             break;
         }
     }
+    tableInfo.finish();
 
     bool hasPairUnique = false;
     QSqlQuery indexList(m_database);
@@ -485,8 +490,28 @@ bool DatabaseManager::ensureFrequencySchema()
             break;
         }
     }
+    indexList.finish();
 
     if (hasFrequency && hasPairUnique) {
+        return true;
+    }
+
+    qint64 duplicateRows = 0;
+    QSqlQuery duplicateGroupsQuery(m_database);
+    if (duplicateGroupsQuery.exec(QStringLiteral(R"(
+        SELECT COALESCE(SUM(group_count - 1), 0)
+        FROM (
+            SELECT COUNT(*) AS group_count
+            FROM translations
+            GROUP BY source_text, translated_text, source_lang, target_lang
+            HAVING COUNT(*) > 1
+        )
+    )")) && duplicateGroupsQuery.next()) {
+        duplicateRows = duplicateGroupsQuery.value(0).toLongLong();
+    }
+    duplicateGroupsQuery.finish();
+
+    if (hasFrequency && duplicateRows == 0) {
         return true;
     }
 
@@ -525,6 +550,7 @@ bool DatabaseManager::ensureFrequencySchema()
             m_database.rollback();
             return false;
         }
+        query.finish();
     }
 
     if (!m_database.commit()) {
@@ -550,6 +576,7 @@ bool DatabaseManager::createIndexes()
             m_lastError = query.lastError().text();
             return false;
         }
+        query.finish();
     }
 
     return ensureLookupIndex();
@@ -563,6 +590,7 @@ bool DatabaseManager::ensureLookupIndex()
         while (indexInfo.next()) {
             indexedColumns.append(indexInfo.value(2).toString());
         }
+        indexInfo.finish();
     } else {
         m_lastError = indexInfo.lastError().text();
         return false;
@@ -581,6 +609,7 @@ bool DatabaseManager::ensureLookupIndex()
             m_lastError = dropQuery.lastError().text();
             return false;
         }
+        dropQuery.finish();
         indexedColumns.clear();
     }
 
@@ -591,6 +620,7 @@ bool DatabaseManager::ensureLookupIndex()
             m_lastError = createQuery.lastError().text();
             return false;
         }
+        createQuery.finish();
     }
 
     return true;
@@ -611,6 +641,7 @@ bool DatabaseManager::removeLegacyUniqueConstraint()
     }
 
     const QString tableSql = cleanedTableSql(schemaQuery.value(0));
+    schemaQuery.finish();
     if (!tableSql.contains(QStringLiteral("unique(source_text,source_lang,target_lang)"))) {
         return true;
     }
@@ -639,6 +670,27 @@ bool DatabaseManager::normalizeStoredLanguages()
             storedLanguages.append(language);
         }
     }
+    selectQuery.finish();
+
+    bool hasLanguageUpdates = false;
+    for (const QString &storedLanguage : storedLanguages) {
+        const QString normalizedLanguage = m_languageNormalizer.normalize(storedLanguage);
+        if (!normalizedLanguage.isEmpty() && normalizedLanguage != storedLanguage) {
+            hasLanguageUpdates = true;
+            break;
+        }
+    }
+
+    if (!hasLanguageUpdates) {
+        return true;
+    }
+
+    QSqlQuery dropPairUnique(m_database);
+    if (!dropPairUnique.exec(QStringLiteral("DROP INDEX IF EXISTS idx_translations_pair_unique"))) {
+        m_lastError = dropPairUnique.lastError().text();
+        return false;
+    }
+    dropPairUnique.finish();
 
     for (const QString &storedLanguage : storedLanguages) {
         const QString normalizedLanguage = m_languageNormalizer.normalize(storedLanguage);
@@ -654,6 +706,7 @@ bool DatabaseManager::normalizeStoredLanguages()
             m_lastError = sourceUpdate.lastError().text();
             return false;
         }
+        sourceUpdate.finish();
 
         QSqlQuery targetUpdate(m_database);
         targetUpdate.prepare(QStringLiteral("UPDATE translations SET target_lang = :normalized WHERE target_lang = :stored"));
@@ -663,6 +716,11 @@ bool DatabaseManager::normalizeStoredLanguages()
             m_lastError = targetUpdate.lastError().text();
             return false;
         }
+        targetUpdate.finish();
+    }
+
+    if (!ensureFrequencySchema() || !createIndexes()) {
+        return false;
     }
 
     if (!ensureFrequencySchema() || !createIndexes()) {

@@ -37,6 +37,7 @@ public:
     explicit TranslatorEngine(const QString &databasePath = QString());
 
     bool initialize();
+    void shutdown();
     QString translate(const QString &text,
                       const QString &sourceLang = QStringLiteral("en"),
                       const QString &targetLang = QStringLiteral("pt_BR")) const;

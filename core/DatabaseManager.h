@@ -42,6 +42,7 @@ public:
     ~DatabaseManager();
 
     bool open();
+    void close();
     bool initialize();
     std::optional<QString> findTranslation(const QString &sourceText,
                                            const QString &sourceLang,
