@@ -60,7 +60,7 @@ bool DatabaseManager::initialize()
         return false;
     }
 
-    if (!createTables() || !createIndexes() || !normalizeStoredLanguages() || !seedInitialTranslations()) {
+    if (!createTables() || !removeLegacyUniqueConstraint() || !createIndexes() || !normalizeStoredLanguages()) {
         return false;
     }
 
@@ -129,9 +129,9 @@ QHash<QString, QString> DatabaseManager::findTranslations(const QStringList &sou
     if (!query.prepare(QStringLiteral(R"(
         SELECT source_text, translated_text
         FROM translations INDEXED BY idx_translations_lookup
-        WHERE source_text IN (%1)
-          AND source_lang IN (%2)
+        WHERE source_lang IN (%2)
           AND target_lang IN (%3)
+          AND source_text IN (%1)
     )").arg(sourceTextPlaceholders.join(QStringLiteral(", ")),
              sourceLangPlaceholders.join(QStringLiteral(", ")),
              targetLangPlaceholders.join(QStringLiteral(", "))))) {
@@ -264,8 +264,7 @@ bool DatabaseManager::createTables()
             source_text TEXT NOT NULL,
             translated_text TEXT NOT NULL,
             source_lang TEXT NOT NULL,
-            target_lang TEXT NOT NULL,
-            UNIQUE(source_text, source_lang, target_lang)
+            target_lang TEXT NOT NULL
         )
     )"));
 
@@ -281,8 +280,7 @@ bool DatabaseManager::createIndexes()
     const QStringList statements = {
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_text ON translations(source_text)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_source_lang ON translations(source_lang)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_target_lang ON translations(target_lang)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_lookup ON translations(source_text, source_lang, target_lang)")
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_translations_target_lang ON translations(target_lang)")
     };
 
     for (const QString &statement : statements) {
@@ -293,41 +291,109 @@ bool DatabaseManager::createIndexes()
         }
     }
 
+    return ensureLookupIndex();
+}
+
+bool DatabaseManager::ensureLookupIndex()
+{
+    QStringList indexedColumns;
+    QSqlQuery indexInfo(m_database);
+    if (indexInfo.exec(QStringLiteral("PRAGMA index_info(idx_translations_lookup)"))) {
+        while (indexInfo.next()) {
+            indexedColumns.append(indexInfo.value(2).toString());
+        }
+    } else {
+        m_lastError = indexInfo.lastError().text();
+        return false;
+    }
+
+    const QStringList expectedColumns = {
+        QStringLiteral("source_lang"),
+        QStringLiteral("target_lang"),
+        QStringLiteral("source_text")
+    };
+
+    if (!indexedColumns.isEmpty() && indexedColumns != expectedColumns) {
+        QSqlQuery dropQuery(m_database);
+        if (!dropQuery.exec(QStringLiteral("DROP INDEX idx_translations_lookup"))) {
+            m_lastError = dropQuery.lastError().text();
+            return false;
+        }
+        indexedColumns.clear();
+    }
+
+    if (indexedColumns.isEmpty()) {
+        QSqlQuery createQuery(m_database);
+        if (!createQuery.exec(QStringLiteral(
+                "CREATE INDEX idx_translations_lookup ON translations(source_lang, target_lang, source_text)"))) {
+            m_lastError = createQuery.lastError().text();
+            return false;
+        }
+    }
+
     return true;
 }
 
-bool DatabaseManager::seedInitialTranslations()
+bool DatabaseManager::removeLegacyUniqueConstraint()
 {
-    return insertTranslation(QStringLiteral("hello"), QStringLiteral("olá"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("world"), QStringLiteral("mundo"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("good morning"), QStringLiteral("bom dia"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("how are you"), QStringLiteral("como você está"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("open"), QStringLiteral("abrir"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("file"), QStringLiteral("arquivo"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("save"), QStringLiteral("salvar"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("delete"), QStringLiteral("excluir"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("network settings"), QStringLiteral("configurações de rede"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("open file"), QStringLiteral("abrir arquivo"), QStringLiteral("en"), QStringLiteral("pt_BR"))
-        && insertTranslation(QStringLiteral("open the file"), QStringLiteral("abrir o arquivo"), QStringLiteral("en"), QStringLiteral("pt_BR"));
-}
+    if (!tableExists(QStringLiteral("translations"))) {
+        return true;
+    }
 
-bool DatabaseManager::insertTranslation(const QString &sourceText,
-                                        const QString &translatedText,
-                                        const QString &sourceLang,
-                                        const QString &targetLang)
-{
+    QSqlQuery schemaQuery(m_database);
+    schemaQuery.prepare(QStringLiteral("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"));
+    schemaQuery.bindValue(QStringLiteral(":name"), QStringLiteral("translations"));
+    if (!schemaQuery.exec() || !schemaQuery.next()) {
+        m_lastError = schemaQuery.lastError().text();
+        return false;
+    }
+
+    QString tableSql = schemaQuery.value(0).toString().toLower();
+    tableSql.remove(QChar::Space);
+    tableSql.remove(QChar::Tabulation);
+    tableSql.remove(QChar::LineFeed);
+    tableSql.remove(QChar::CarriageReturn);
+
+    if (!tableSql.contains(QStringLiteral("unique(source_text,source_lang,target_lang)"))) {
+        return true;
+    }
+
+    if (!m_database.transaction()) {
+        m_lastError = m_database.lastError().text();
+        return false;
+    }
+
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(R"(
-        INSERT OR IGNORE INTO translations (source_text, translated_text, source_lang, target_lang)
-        VALUES (:source_text, :translated_text, :source_lang, :target_lang)
-    )"));
-    query.bindValue(QStringLiteral(":source_text"), normalizedText(sourceText));
-    query.bindValue(QStringLiteral(":translated_text"), translatedText.trimmed());
-    query.bindValue(QStringLiteral(":source_lang"), m_languageNormalizer.normalize(sourceLang));
-    query.bindValue(QStringLiteral(":target_lang"), m_languageNormalizer.normalize(targetLang));
+    const QStringList migrationStatements = {
+        QStringLiteral("DROP TABLE IF EXISTS translations_without_unique"),
+        QStringLiteral(R"(
+            CREATE TABLE translations_without_unique (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_text TEXT NOT NULL,
+                translated_text TEXT NOT NULL,
+                source_lang TEXT NOT NULL,
+                target_lang TEXT NOT NULL
+            )
+        )"),
+        QStringLiteral(R"(
+            INSERT INTO translations_without_unique (id, source_text, translated_text, source_lang, target_lang)
+            SELECT id, source_text, translated_text, source_lang, target_lang
+            FROM translations
+        )"),
+        QStringLiteral("DROP TABLE translations"),
+        QStringLiteral("ALTER TABLE translations_without_unique RENAME TO translations")
+    };
 
-    if (!query.exec()) {
-        m_lastError = query.lastError().text();
+    for (const QString &statement : migrationStatements) {
+        if (!query.exec(statement)) {
+            m_lastError = query.lastError().text();
+            m_database.rollback();
+            return false;
+        }
+    }
+
+    if (!m_database.commit()) {
+        m_lastError = m_database.lastError().text();
         return false;
     }
 
@@ -357,7 +423,7 @@ bool DatabaseManager::normalizeStoredLanguages()
         }
 
         QSqlQuery sourceUpdate(m_database);
-        sourceUpdate.prepare(QStringLiteral("UPDATE OR IGNORE translations SET source_lang = :normalized WHERE source_lang = :stored"));
+        sourceUpdate.prepare(QStringLiteral("UPDATE translations SET source_lang = :normalized WHERE source_lang = :stored"));
         sourceUpdate.bindValue(QStringLiteral(":normalized"), normalizedLanguage);
         sourceUpdate.bindValue(QStringLiteral(":stored"), storedLanguage);
         if (!sourceUpdate.exec()) {
@@ -366,7 +432,7 @@ bool DatabaseManager::normalizeStoredLanguages()
         }
 
         QSqlQuery targetUpdate(m_database);
-        targetUpdate.prepare(QStringLiteral("UPDATE OR IGNORE translations SET target_lang = :normalized WHERE target_lang = :stored"));
+        targetUpdate.prepare(QStringLiteral("UPDATE translations SET target_lang = :normalized WHERE target_lang = :stored"));
         targetUpdate.bindValue(QStringLiteral(":normalized"), normalizedLanguage);
         targetUpdate.bindValue(QStringLiteral(":stored"), storedLanguage);
         if (!targetUpdate.exec()) {
