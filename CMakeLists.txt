@@ -6,12 +6,23 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(ATLAS_RUNTIME_DIRECTORIES
+    database
+    datasets
+)
+
+foreach(runtime_directory IN LISTS ATLAS_RUNTIME_DIRECTORIES)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/${runtime_directory}")
+endforeach()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Sql)
 
 qt_standard_project_setup()
 
 add_executable(AtlasTranslator
     main.cpp
+    core/AppPaths.cpp
+    core/AppPaths.h
     core/AtlasImporter.cpp
     core/AtlasImporter.h
     core/DatabaseManager.cpp
@@ -38,4 +49,5 @@ target_link_libraries(AtlasTranslator
 
 add_custom_command(TARGET AtlasTranslator POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AtlasTranslator>/database"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AtlasTranslator>/datasets"
 )

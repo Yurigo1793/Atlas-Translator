@@ -41,7 +41,7 @@ private:
     bool removeLegacyUniqueConstraint();
     bool ensureProgressTable();
     bool prepareInsertStatement(QSqlQuery &query);
-    bool shouldImportLine(const QString &sourceText, const QString &targetText) const;
+    bool isValidTranslationPair(const QString &sourceText, const QString &targetText) const;
     bool loadProgress(const QString &importKey, qint64 &processedLines, bool &completed);
     bool saveProgress(const QString &importKey,
                       const QString &sourceFilePath,

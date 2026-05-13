@@ -80,7 +80,7 @@ private:
     LanguageNormalizer m_languageNormalizer;
     mutable QueryCache m_translationCache;
     mutable Statistics m_statistics;
-    bool m_debugEnabled = true;
+    bool m_debugEnabled = false;
 };
 
 #endif // TRANSLATORENGINE_H

@@ -1,8 +1,8 @@
 #include "DatasetScanner.h"
 
 #include "LanguageNormalizer.h"
+#include "AppPaths.h"
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -33,8 +33,8 @@ QList<DatasetInfo> DatasetScanner::scan()
 
     QList<DatasetInfo> datasets;
     QDir datasetsDirectory(m_datasetsPath);
-    if (!datasetsDirectory.exists()) {
-        m_lastError = QStringLiteral("Diretório de datasets não encontrado: %1").arg(m_datasetsPath);
+    if (!datasetsDirectory.exists() && !QDir().mkpath(m_datasetsPath)) {
+        m_lastError = QStringLiteral("Não foi possível criar o diretório de datasets: %1").arg(m_datasetsPath);
         return datasets;
     }
 
@@ -142,12 +142,7 @@ QString DatasetScanner::resolveDatasetsPath(const QString &datasetsPath) const
         return QDir::cleanPath(datasetsPath);
     }
 
-    const QString currentPath = QDir::current().filePath(QStringLiteral("datasets"));
-    if (QFileInfo::exists(currentPath)) {
-        return QDir::cleanPath(currentPath);
-    }
-
-    return QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("datasets")));
+    return QDir::cleanPath(AppPaths::datasetsPath());
 }
 
 bool DatasetScanner::parseCandidate(const QFileInfo &fileInfo, CandidateFile &candidate) const

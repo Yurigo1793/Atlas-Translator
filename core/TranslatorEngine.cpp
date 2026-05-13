@@ -41,6 +41,18 @@ TranslatorEngine::TranslationResult TranslatorEngine::translateDetailed(const QS
         return result;
     }
 
+    const PhraseMatch completeMatch = findBestMatch(words, 0, normalizedSourceLang, normalizedTargetLang);
+    if (completeMatch.found && completeMatch.consumedWords == words.size()) {
+        result.translation = completeMatch.translation;
+        result.matchedText = completeMatch.matchedText;
+        result.matchType = QStringLiteral("full");
+        result.consumedWords = completeMatch.consumedWords;
+        logMatch(text, completeMatch, normalizedSourceLang, normalizedTargetLang);
+        result.translationTimeNs = timer.nsecsElapsed();
+        recordTranslationTime(result.translationTimeNs);
+        return result;
+    }
+
     QStringList translatedParts;
     translatedParts.reserve(words.size());
 

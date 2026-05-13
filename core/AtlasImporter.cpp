@@ -1,14 +1,15 @@
 #include "AtlasImporter.h"
 
 #include "TextNormalizer.h"
+#include "AppPaths.h"
 
-#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QRegularExpression>
 #include <QStringConverter>
 #include <QStringList>
 #include <QTextStream>
@@ -27,7 +28,7 @@ AtlasImporter::AtlasImporter(const QString &databasePath)
       m_connectionName(QStringLiteral("atlas_importer_%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)))
 {
     if (m_databasePath.isEmpty()) {
-        m_databasePath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("database/atlas.db"));
+        m_databasePath = AppPaths::databaseFile();
     }
 }
 
@@ -122,7 +123,7 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
         ++m_stats.processedLines;
         ++linesSinceCommit;
 
-        if (!shouldImportLine(sourceText, targetText)) {
+        if (!isValidTranslationPair(sourceText, targetText)) {
             ++m_stats.ignoredLines;
         } else {
             insertQuery.bindValue(QStringLiteral(":source_text"), normalizedSourceText(sourceText));
@@ -423,8 +424,77 @@ bool AtlasImporter::prepareInsertStatement(QSqlQuery &query)
     return true;
 }
 
-bool AtlasImporter::shouldImportLine(const QString &sourceText, const QString &targetText) const
+bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QString &targetText) const
 {
+    auto hasTechnicalNoise = [](const QString &text) {
+        static const QRegularExpression markupExpression(QStringLiteral(R"(<\/?\w+|&(?:[a-z]+|#\d+);|<!DOCTYPE|<\?xml)"),
+                                                         QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression styleExpression(QStringLiteral(R"((?:^|[\s;])(?:margin|padding|font-size|background|color|display|width|height)\s*:|\.[A-Za-z0-9_-]+\s*\{|#(?:[A-Fa-f0-9]{3}){1,2}\b)"),
+                                                        QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression urlExpression(QStringLiteral(R"((?:https?|ftp)://|www\.|\b\w+://)"),
+                                                      QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression codeExpression(QStringLiteral(R"((?:\b(?:function|class|return|if|else|while|for|var|let|const|import|include)\b\s*[\(\{;])|(?:->|=>|::|==|!=|<=|>=|&&|\|\|)|[\{\}\[\];]{2,})"),
+                                                       QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression variableExpression(QStringLiteral(R"((?:%\d+|%[A-Za-z_]+|\$\{?\w+\}?|\{\d+\}|@[A-Za-z_]+@|__[A-Za-z0-9_]+__|\b[A-Z_]{3,}\b))"));
+        static const QRegularExpression pidExpression(QStringLiteral(R"(\bPID\b|\bprocess\s+id\b)"),
+                                                      QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression authorizationExpression(QStringLiteral(R"(\bAuthorization\b|\bBearer\b|\bOAuth\b|\bAPI[-_ ]?Key\b|\btoken\b)"),
+                                                               QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression tooltipExpression(QStringLiteral(R"(\btooltip\b|tool\s*tip)"),
+                                                         QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression filePathExpression(QStringLiteral(R"((?:[A-Za-z]:\\|/\w+/|\.\.?/|\w+/\w+\.\w{1,6}\b))"));
+
+        return markupExpression.match(text).hasMatch()
+            || styleExpression.match(text).hasMatch()
+            || urlExpression.match(text).hasMatch()
+            || codeExpression.match(text).hasMatch()
+            || variableExpression.match(text).hasMatch()
+            || pidExpression.match(text).hasMatch()
+            || authorizationExpression.match(text).hasMatch()
+            || tooltipExpression.match(text).hasMatch()
+            || filePathExpression.match(text).hasMatch();
+    };
+
+    auto hasExcessiveSymbols = [](const QString &text) {
+        qsizetype lettersOrNumbers = 0;
+        qsizetype symbols = 0;
+        qsizetype repeatedPunctuationRun = 0;
+        qsizetype currentPunctuationRun = 0;
+
+        for (const QChar character : text) {
+            if (character.isLetterOrNumber()) {
+                ++lettersOrNumbers;
+                currentPunctuationRun = 0;
+            } else if (character.isSpace()) {
+                currentPunctuationRun = 0;
+            } else {
+                ++symbols;
+                ++currentPunctuationRun;
+                repeatedPunctuationRun = qMax(repeatedPunctuationRun, currentPunctuationRun);
+            }
+        }
+
+        if (lettersOrNumbers == 0) {
+            return true;
+        }
+
+        const double symbolRatio = static_cast<double>(symbols) / static_cast<double>(text.size());
+        return symbolRatio > 0.35 || repeatedPunctuationRun >= 4;
+    };
+
+    auto looksStrange = [](const QString &text) {
+        static const QRegularExpression mostlyNumbersExpression(QStringLiteral(R"(^[\d\s\.,:/_\-+]+$)"));
+        static const QRegularExpression repeatedTokenExpression(QStringLiteral(R"(\b(\w+)\b(?:\s+\1\b){3,})"),
+                                                               QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression longTechnicalTokenExpression(QStringLiteral(R"(\b[A-Za-z0-9_./\\-]{35,}\b)"));
+
+        const QStringList words = text.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        return mostlyNumbersExpression.match(text).hasMatch()
+            || repeatedTokenExpression.match(text).hasMatch()
+            || longTechnicalTokenExpression.match(text).hasMatch()
+            || (words.size() == 1 && text.size() > 40);
+    };
+
     if (sourceText.isEmpty() || targetText.isEmpty()) {
         return false;
     }
@@ -433,7 +503,16 @@ bool AtlasImporter::shouldImportLine(const QString &sourceText, const QString &t
         return false;
     }
 
-    return sourceText.size() >= MinimumLineLength && targetText.size() >= MinimumLineLength;
+    if (sourceText.size() < MinimumLineLength || targetText.size() < MinimumLineLength) {
+        return false;
+    }
+
+    return !hasTechnicalNoise(sourceText)
+        && !hasTechnicalNoise(targetText)
+        && !hasExcessiveSymbols(sourceText)
+        && !hasExcessiveSymbols(targetText)
+        && !looksStrange(sourceText)
+        && !looksStrange(targetText);
 }
 
 
