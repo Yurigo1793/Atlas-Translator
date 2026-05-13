@@ -1,8 +1,10 @@
 #include "TranslatorEngine.h"
 
+#include "Utf8Streams.h"
+
 #include <QElapsedTimer>
-#include <QTextStream>
 #include <QList>
+#include <QTextStream>
 
 TranslatorEngine::TranslatorEngine(const QString &databasePath)
     : m_databaseManager(databasePath),
@@ -112,7 +114,9 @@ TranslatorEngine::PhraseMatch TranslatorEngine::findBestMatch(const QStringList 
                 ++m_statistics.cacheHits;
                 availableTranslations.insert(candidate, cachedTranslation);
                 if (m_debugEnabled) {
-                    QTextStream(stdout) << "[CACHE HIT] " << candidate << Qt::endl;
+                    QTextStream output(stdout);
+                    configureUtf8Stream(output);
+                    output << "[CACHE HIT] " << candidate << Qt::endl;
                 }
                 continue;
             }
@@ -122,7 +126,9 @@ TranslatorEngine::PhraseMatch TranslatorEngine::findBestMatch(const QStringList 
                 missingCandidates.append(candidate);
             }
             if (m_debugEnabled) {
-                QTextStream(stdout) << "[CACHE MISS] " << candidate << Qt::endl;
+                QTextStream output(stdout);
+                configureUtf8Stream(output);
+                output << "[CACHE MISS] " << candidate << Qt::endl;
             }
         }
     }
@@ -133,9 +139,11 @@ TranslatorEngine::PhraseMatch TranslatorEngine::findBestMatch(const QStringList 
                                                                                         targetLang);
     const DatabaseManager::SqlStatistics sqlAfter = m_databaseManager.sqlStatistics();
     if (m_debugEnabled && sqlAfter.queryCount > sqlBefore.queryCount) {
-        QTextStream(stdout) << "[SQL QUERY TIME] "
-                            << QString::number(static_cast<double>(sqlAfter.totalQueryTimeNs - sqlBefore.totalQueryTimeNs) / 1000000.0, 'f', 3)
-                            << " ms" << Qt::endl;
+        QTextStream output(stdout);
+        configureUtf8Stream(output);
+        output << "[SQL QUERY TIME] "
+               << QString::number(static_cast<double>(sqlAfter.totalQueryTimeNs - sqlBefore.totalQueryTimeNs) / 1000000.0, 'f', 3)
+               << " ms" << Qt::endl;
     }
 
     for (auto iterator = databaseMatches.constBegin(); iterator != databaseMatches.constEnd(); ++iterator) {
@@ -188,6 +196,7 @@ double TranslatorEngine::averageTranslationTimeMs() const
 
 void TranslatorEngine::printStatistics(QTextStream &output) const
 {
+    configureUtf8Stream(output);
     const DatabaseManager::SqlStatistics sqlStats = m_databaseManager.sqlStatistics();
 
     output << Qt::endl;
@@ -240,6 +249,7 @@ void TranslatorEngine::logMatch(const QString &input,
     }
 
     QTextStream output(stdout);
+    configureUtf8Stream(output);
     output << "[MATCH]" << Qt::endl;
     output << "MATCH FOUND" << Qt::endl;
     output << "Input: " << input << Qt::endl;

@@ -2,151 +2,163 @@
 #include "core/AtlasImporter.h"
 #include "core/DatasetScanner.h"
 #include "core/TranslatorEngine.h"
+#include "core/Utf8Streams.h"
 
 #include <QCoreApplication>
 #include <QList>
 #include <QTextStream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace {
 constexpr bool detailedDebug = false;
 
-QString readLanguage(QTextStream &input,
-                     QTextStream &output,
+QString readLanguage(QTextStream &in,
+                     QTextStream &out,
                      const QString &label,
                      const QString &defaultLanguage)
 {
-    output << label << " [" << defaultLanguage << "]: " << Qt::flush;
-    const QString language = input.readLine().trimmed();
+    out << label << " [" << defaultLanguage << "]: " << Qt::flush;
+    const QString language = in.readLine().trimmed();
     return language.isEmpty() ? defaultLanguage : language;
 }
 
-void translateText(TranslatorEngine &translator, QTextStream &input, QTextStream &output)
+void translateText(TranslatorEngine &translator, QTextStream &in, QTextStream &out)
 {
-    const QString sourceLang = readLanguage(input, output, QStringLiteral("Idioma de origem"), QStringLiteral("en"));
-    const QString targetLang = readLanguage(input, output, QStringLiteral("Idioma de destino"), QStringLiteral("pt_BR"));
+    const QString sourceLang = readLanguage(in, out, QStringLiteral("Idioma de origem"), QStringLiteral("en"));
+    const QString targetLang = readLanguage(in, out, QStringLiteral("Idioma de destino"), QStringLiteral("pt_BR"));
 
-    output << "Digite o texto para traduzir (ou 'exit' para voltar):" << Qt::endl;
+    out << "Digite o texto para traduzir (ou 'exit' para voltar):" << Qt::endl;
 
     while (true) {
-        output << "Digite: " << Qt::flush;
-        const QString line = input.readLine().trimmed();
+        out << "Digite: " << Qt::flush;
+        const QString line = in.readLine().trimmed();
 
         if (line.compare(QStringLiteral("exit"), Qt::CaseInsensitive) == 0) {
             break;
         }
 
         const TranslatorEngine::TranslationResult result = translator.translateDetailed(line, sourceLang, targetLang);
-        output << result.translation << Qt::endl;
-        output << "Tempo: " << QString::number(static_cast<double>(result.translationTimeNs) / 1000000.0, 'f', 3)
+        out << result.translation << Qt::endl;
+        out << "Tempo: " << QString::number(static_cast<double>(result.translationTimeNs) / 1000000.0, 'f', 3)
                << " ms | Tipo: " << result.matchType << Qt::endl;
     }
 }
 
-void printDatasets(const QList<DatasetInfo> &datasets, QTextStream &output)
+void printDatasets(const QList<DatasetInfo> &datasets, QTextStream &out)
 {
     if (datasets.isEmpty()) {
-        output << "Nenhum dataset OPUS/Moses válido foi encontrado." << Qt::endl;
+        out << "Nenhum dataset OPUS/Moses válido foi encontrado." << Qt::endl;
         return;
     }
 
     for (qsizetype index = 0; index < datasets.size(); ++index) {
         const DatasetInfo &dataset = datasets.at(index);
-        output << "[" << index << "] " << dataset.corpusName
+        out << "[" << index << "] " << dataset.corpusName
                << " (" << dataset.sourceLanguage << " -> " << dataset.targetLanguage << ")"
                << Qt::endl;
     }
 }
 
-bool importDetectedDataset(QTextStream &input, QTextStream &output)
+bool importDetectedDataset(QTextStream &in, QTextStream &out)
 {
     DatasetScanner scanner;
-    output << "Escaneando datasets em: " << scanner.datasetsPath() << Qt::endl;
+    out << "Escaneando datasets em: " << scanner.datasetsPath() << Qt::endl;
     const QList<DatasetInfo> datasets = scanner.scan();
 
     if (!scanner.lastError().isEmpty()) {
-        output << scanner.lastError() << Qt::endl;
+        out << scanner.lastError() << Qt::endl;
     }
 
-    printDatasets(datasets, output);
+    printDatasets(datasets, out);
     if (datasets.isEmpty()) {
-        output << "Coloque arquivos Moses/OPUS na pasta acima e tente novamente." << Qt::endl;
+        out << "Coloque arquivos Moses/OPUS na pasta acima e tente novamente." << Qt::endl;
         return false;
     }
 
-    output << "Escolha o índice do dataset: " << Qt::flush;
+    out << "Escolha o índice do dataset: " << Qt::flush;
 
     bool validIndex = false;
-    const int selectedIndex = input.readLine().trimmed().toInt(&validIndex);
+    const int selectedIndex = in.readLine().trimmed().toInt(&validIndex);
     if (!validIndex || selectedIndex < 0 || selectedIndex >= datasets.size()) {
-        output << "Índice inválido." << Qt::endl;
+        out << "Índice inválido." << Qt::endl;
         return false;
     }
 
     const DatasetInfo &dataset = datasets.at(selectedIndex);
     AtlasImporter importer;
 
-    output << "Importando dataset Moses/OPUS detectado:" << Qt::endl;
-    output << dataset.corpusName << " (" << dataset.sourceLanguage << " -> " << dataset.targetLanguage << ")" << Qt::endl;
-    output << "Origem: " << dataset.sourceFile << Qt::endl;
-    output << "Destino: " << dataset.targetFile << Qt::endl;
+    out << "Importando dataset Moses/OPUS detectado:" << Qt::endl;
+    out << dataset.corpusName << " (" << dataset.sourceLanguage << " -> " << dataset.targetLanguage << ")" << Qt::endl;
+    out << "Origem: " << dataset.sourceFile << Qt::endl;
+    out << "Destino: " << dataset.targetFile << Qt::endl;
 
     if (!importer.importMosesDataset(dataset.sourceFile,
                                      dataset.targetFile,
                                      dataset.sourceLanguage,
                                      dataset.targetLanguage)) {
-        output << "Erro ao importar dataset: " << importer.lastError() << Qt::endl;
+        out << "Erro ao importar dataset: " << importer.lastError() << Qt::endl;
         return false;
     }
 
-    output << "Importação concluída em: " << importer.databasePath() << Qt::endl;
+    out << "Importação concluída em: " << importer.databasePath() << Qt::endl;
     return true;
 }
 }
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
     QCoreApplication app(argc, argv);
-    QTextStream input(stdin);
-    QTextStream output(stdout);
+    QTextStream in(stdin);
+    QTextStream out(stdout);
+    configureUtf8Stream(in);
+    configureUtf8Stream(out);
 
     QString pathError;
     if (!AppPaths::ensureRequiredDirectories(&pathError)) {
-        output << "Erro ao preparar diretórios do Atlas-Translator: " << pathError << Qt::endl;
+        out << "Erro ao preparar diretórios do Atlas-Translator: " << pathError << Qt::endl;
         return 1;
     }
 
     TranslatorEngine translator;
     translator.setDebugEnabled(detailedDebug);
     if (!translator.initialize()) {
-        output << "Erro ao inicializar o Atlas-Translator: " << translator.lastError() << Qt::endl;
+        out << "Erro ao inicializar o Atlas-Translator: " << translator.lastError() << Qt::endl;
         return 1;
     }
 
-    output << "Atlas-Translator offline iniciado." << Qt::endl;
-    output << "Datasets: " << AppPaths::datasetsPath() << Qt::endl;
-    output << "Database: " << AppPaths::databaseFile() << Qt::endl;
+    out << "Atlas-Translator offline iniciado." << Qt::endl;
+    out << "Datasets: " << AppPaths::datasetsPath() << Qt::endl;
+    out << "Database: " << AppPaths::databaseFile() << Qt::endl;
 
     while (true) {
-        output << Qt::endl;
-        output << "1 - Traduzir texto" << Qt::endl;
-        output << "2 - Importar dataset detectado" << Qt::endl;
-        output << "0 - Sair" << Qt::endl;
-        output << "Opção: " << Qt::flush;
+        out << Qt::endl;
+        out << "1 - Traduzir texto" << Qt::endl;
+        out << "2 - Importar dataset detectado" << Qt::endl;
+        out << "0 - Sair" << Qt::endl;
+        out << "Opção: " << Qt::flush;
 
-        const QString option = input.readLine().trimmed();
+        const QString option = in.readLine().trimmed();
 
         if (option == QStringLiteral("1")) {
-            translateText(translator, input, output);
+            translateText(translator, in, out);
         } else if (option == QStringLiteral("2")) {
-            importDetectedDataset(input, output);
+            importDetectedDataset(in, out);
             translator.initialize();
         } else if (option == QStringLiteral("0")) {
             break;
         } else {
-            output << "Opção inválida." << Qt::endl;
+            out << "Opção inválida." << Qt::endl;
         }
     }
 
-    output << "Encerrando Atlas-Translator." << Qt::endl;
+    out << "Encerrando Atlas-Translator." << Qt::endl;
     return 0;
 }

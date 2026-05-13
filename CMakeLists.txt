@@ -39,6 +39,7 @@ add_executable(AtlasTranslator
     core/TextNormalizer.h
     core/TranslatorEngine.cpp
     core/TranslatorEngine.h
+    core/Utf8Streams.h
 )
 
 target_link_libraries(AtlasTranslator

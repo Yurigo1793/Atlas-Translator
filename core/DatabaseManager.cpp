@@ -2,6 +2,7 @@
 
 #include "TextNormalizer.h"
 #include "AppPaths.h"
+#include "Utf8Streams.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -237,6 +238,7 @@ DatabaseManager::DatabaseSummary DatabaseManager::databaseSummary() const
 
 void DatabaseManager::printDatabaseSummary(QTextStream &output) const
 {
+    configureUtf8Stream(output);
     const DatabaseSummary summary = databaseSummary();
 
     output << "Database loaded" << Qt::endl;
