@@ -4,6 +4,7 @@
 #include "LanguageNormalizer.h"
 
 #include <QHash>
+#include <QList>
 #include <QSqlDatabase>
 #include <QString>
 #include <QStringList>
@@ -21,17 +22,27 @@ public:
     };
 
     struct DatabaseSummary {
+        bool sqliteOpened = false;
         bool tableExists = false;
         bool indexesOk = false;
         qint64 translationCount = 0;
+        qint64 totalFrequency = 0;
+        QString databasePath;
         QStringList languagePairs;
         QStringList indexes;
+    };
+
+    struct LanguagePair {
+        QString sourceLang;
+        QString targetLang;
+        qint64 translationCount = 0;
     };
 
     explicit DatabaseManager(const QString &databasePath = QString());
     ~DatabaseManager();
 
     bool open();
+    void close();
     bool initialize();
     std::optional<QString> findTranslation(const QString &sourceText,
                                            const QString &sourceLang,
@@ -45,12 +56,16 @@ public:
     SqlStatistics sqlStatistics() const;
     double averageSqlQueryTimeMs() const;
     DatabaseSummary databaseSummary() const;
+    QStringList availableLanguages() const;
+    QList<LanguagePair> availableLanguagePairs() const;
+    bool hasLanguagePair(const QString &sourceLang, const QString &targetLang) const;
     void printDatabaseSummary(QTextStream &output) const;
 
 private:
     bool createTables();
     bool createIndexes();
     bool ensureLookupIndex();
+    bool ensureFrequencySchema();
     bool removeLegacyUniqueConstraint();
     bool normalizeStoredLanguages();
     bool tableExists(const QString &tableName) const;

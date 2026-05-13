@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QList>
+#include <QStringList>
 #include <QTextStream>
 
 #ifdef _WIN32
@@ -13,30 +14,77 @@
 #endif
 
 namespace {
-constexpr bool detailedDebug = false;
+constexpr bool defaultDetailedDebug = false;
 
-QString readLanguage(QTextStream &in,
-                     QTextStream &out,
-                     const QString &label,
-                     const QString &defaultLanguage)
+void printAvailableLanguages(const QStringList &languages, QTextStream &out)
 {
-    out << label << " [" << defaultLanguage << "]: " << Qt::flush;
-    const QString language = in.readLine().trimmed();
-    return language.isEmpty() ? defaultLanguage : language;
+    out << "Idiomas disponíveis:" << Qt::endl;
+    for (qsizetype index = 0; index < languages.size(); ++index) {
+        out << "[" << index << "] " << languages.at(index) << Qt::endl;
+    }
+}
+
+void printAvailablePairs(const QList<DatabaseManager::LanguagePair> &pairs, QTextStream &out)
+{
+    out << "Pares disponíveis:" << Qt::endl;
+    if (pairs.isEmpty()) {
+        out << "- none" << Qt::endl;
+        return;
+    }
+
+    for (qsizetype index = 0; index < pairs.size(); ++index) {
+        const DatabaseManager::LanguagePair &pair = pairs.at(index);
+        out << "[" << index << "] " << pair.sourceLang << " -> " << pair.targetLang
+            << " (" << pair.translationCount << ")" << Qt::endl;
+    }
+}
+
+DatabaseManager::LanguagePair chooseLanguagePair(QTextStream &in,
+                                                 QTextStream &out,
+                                                 const QList<DatabaseManager::LanguagePair> &pairs)
+{
+    while (true) {
+        out << "Escolha o par de idiomas (índice): " << Qt::flush;
+        bool validIndex = false;
+        const int selectedIndex = in.readLine().trimmed().toInt(&validIndex);
+        if (validIndex && selectedIndex >= 0 && selectedIndex < pairs.size()) {
+            return pairs.at(selectedIndex);
+        }
+
+        out << "Par inválido. Escolha um índice listado." << Qt::endl;
+    }
 }
 
 void translateText(TranslatorEngine &translator, QTextStream &in, QTextStream &out)
 {
-    const QString sourceLang = readLanguage(in, out, QStringLiteral("Idioma de origem"), QStringLiteral("en"));
-    const QString targetLang = readLanguage(in, out, QStringLiteral("Idioma de destino"), QStringLiteral("pt_BR"));
+    const QStringList languages = translator.availableLanguages();
+    const QList<DatabaseManager::LanguagePair> pairs = translator.availableLanguagePairs();
+    if (languages.isEmpty() || pairs.isEmpty()) {
+        out << "Nenhum par de idiomas disponível no banco. Importe um dataset primeiro." << Qt::endl;
+        return;
+    }
 
+    printAvailableLanguages(languages, out);
+    printAvailablePairs(pairs, out);
+
+    const DatabaseManager::LanguagePair selectedPair = chooseLanguagePair(in, out, pairs);
+    const QString sourceLang = selectedPair.sourceLang;
+    const QString targetLang = selectedPair.targetLang;
+
+    if (!translator.hasLanguagePair(sourceLang, targetLang)) {
+        out << "No translations available for:" << Qt::endl;
+        out << sourceLang << " -> " << targetLang << Qt::endl;
+        return;
+    }
+
+    out << "Usando par: " << sourceLang << " -> " << targetLang << Qt::endl;
     out << "Digite o texto para traduzir (ou 'exit' para voltar):" << Qt::endl;
 
     while (true) {
         out << "Digite: " << Qt::flush;
-        const QString line = in.readLine().trimmed();
+        const QString line = in.readLine();
 
-        if (line.compare(QStringLiteral("exit"), Qt::CaseInsensitive) == 0) {
+        if (line.trimmed().compare(QStringLiteral("exit"), Qt::CaseInsensitive) == 0) {
             break;
         }
 
@@ -127,6 +175,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    const bool detailedDebug = app.arguments().contains(QStringLiteral("--debug")) ? true : defaultDetailedDebug;
+
     TranslatorEngine translator;
     translator.setDebugEnabled(detailedDebug);
     if (!translator.initialize()) {
@@ -136,7 +186,7 @@ int main(int argc, char *argv[])
 
     out << "Atlas-Translator offline iniciado." << Qt::endl;
     out << "Datasets: " << AppPaths::datasetsPath() << Qt::endl;
-    out << "Database: " << AppPaths::databaseFile() << Qt::endl;
+    translator.printDatabaseSummary(out);
 
     while (true) {
         out << Qt::endl;
@@ -150,8 +200,13 @@ int main(int argc, char *argv[])
         if (option == QStringLiteral("1")) {
             translateText(translator, in, out);
         } else if (option == QStringLiteral("2")) {
+            translator.shutdown();
             importDetectedDataset(in, out);
-            translator.initialize();
+            if (!translator.initialize()) {
+                out << "Erro ao recarregar banco após importação: " << translator.lastError() << Qt::endl;
+            } else {
+                translator.printDatabaseSummary(out);
+            }
         } else if (option == QStringLiteral("0")) {
             break;
         } else {
