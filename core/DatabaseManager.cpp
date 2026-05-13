@@ -1,8 +1,8 @@
 #include "DatabaseManager.h"
 
 #include "TextNormalizer.h"
+#include "AppPaths.h"
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -17,7 +17,7 @@ DatabaseManager::DatabaseManager(const QString &databasePath)
       m_connectionName(QStringLiteral("atlas_connection_%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)))
 {
     if (m_databasePath.isEmpty()) {
-        m_databasePath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("database/atlas.db"));
+        m_databasePath = AppPaths::databaseFile();
     }
 }
 
@@ -64,8 +64,6 @@ bool DatabaseManager::initialize()
         return false;
     }
 
-    QTextStream output(stdout);
-    printDatabaseSummary(output);
     return true;
 }
 
