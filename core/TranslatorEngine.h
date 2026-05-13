@@ -8,6 +8,7 @@
 #include "Tokenizer.h"
 
 #include <QHash>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QtGlobal>
@@ -45,8 +46,13 @@ public:
     QString lastError() const;
     Statistics statistics() const;
     DatabaseManager::SqlStatistics sqlStatistics() const;
+    DatabaseManager::DatabaseSummary databaseSummary() const;
+    QStringList availableLanguages() const;
+    QList<DatabaseManager::LanguagePair> availableLanguagePairs() const;
+    bool hasLanguagePair(const QString &sourceLang, const QString &targetLang) const;
     double averageTranslationTimeMs() const;
     void printStatistics(QTextStream &output) const;
+    void printDatabaseSummary(QTextStream &output) const;
     void setDebugEnabled(bool enabled);
     bool debugEnabled() const;
 
@@ -59,6 +65,9 @@ private:
         qsizetype consumedWords = 0;
     };
 
+    TranslationResult translateSegment(const QString &text,
+                                       const QString &sourceLang,
+                                       const QString &targetLang) const;
     PhraseMatch findBestMatch(const QStringList &words,
                               qsizetype position,
                               const QString &sourceLang,
@@ -81,6 +90,7 @@ private:
     mutable QueryCache m_translationCache;
     mutable Statistics m_statistics;
     bool m_debugEnabled = false;
+    bool m_ready = false;
 };
 
 #endif // TRANSLATORENGINE_H
