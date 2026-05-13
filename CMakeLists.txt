@@ -16,10 +16,16 @@ add_executable(AtlasTranslator
     core/AtlasImporter.h
     core/DatabaseManager.cpp
     core/DatabaseManager.h
+    core/LanguageNormalizer.cpp
+    core/LanguageNormalizer.h
     core/DatasetScanner.cpp
     core/DatasetScanner.h
     core/Tokenizer.cpp
     core/Tokenizer.h
+    core/QueryCache.cpp
+    core/QueryCache.h
+    core/TextNormalizer.cpp
+    core/TextNormalizer.h
     core/TranslatorEngine.cpp
     core/TranslatorEngine.h
 )

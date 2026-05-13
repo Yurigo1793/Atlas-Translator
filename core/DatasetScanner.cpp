@@ -1,5 +1,7 @@
 #include "DatasetScanner.h"
 
+#include "LanguageNormalizer.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -101,10 +103,11 @@ QList<DatasetInfo> DatasetScanner::scan()
         }
 
         emittedDatasets.insert(datasetKey);
+        const LanguageNormalizer languageNormalizer;
         datasets.append(DatasetInfo{
             sourceCandidate.corpusName,
-            sourceLanguage,
-            targetLanguage,
+            languageNormalizer.normalize(sourceLanguage),
+            languageNormalizer.normalize(targetLanguage),
             sourceCandidate.filePath,
             targetCandidate.filePath
         });
