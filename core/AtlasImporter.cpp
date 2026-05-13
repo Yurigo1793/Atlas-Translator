@@ -389,7 +389,6 @@ bool AtlasImporter::ensureLookupIndex()
     return true;
 }
 
-
 bool AtlasImporter::ensureFrequencySchema()
 {
     bool hasFrequency = false;
@@ -480,97 +479,6 @@ bool AtlasImporter::ensureFrequencySchema()
             return false;
         }
         query.finish();
-    }
-
-    if (!m_database.commit()) {
-        m_lastError = m_database.lastError().text();
-        return false;
-    }
-
-    return true;
-}
-
-
-bool AtlasImporter::ensureFrequencySchema()
-{
-    bool hasFrequency = false;
-    QSqlQuery tableInfo(m_database);
-    if (!tableInfo.exec(QStringLiteral("PRAGMA table_info(translations)"))) {
-        m_lastError = tableInfo.lastError().text();
-        return false;
-    }
-    while (tableInfo.next()) {
-        if (tableInfo.value(1).toString() == QStringLiteral("frequency")) {
-            hasFrequency = true;
-            break;
-        }
-    }
-
-    bool hasPairUnique = false;
-    QSqlQuery indexList(m_database);
-    if (!indexList.exec(QStringLiteral("PRAGMA index_list(translations)"))) {
-        m_lastError = indexList.lastError().text();
-        return false;
-    }
-    while (indexList.next()) {
-        if (indexList.value(1).toString() == QStringLiteral("idx_translations_pair_unique")) {
-            hasPairUnique = true;
-            break;
-        }
-    }
-
-    if (hasFrequency && hasPairUnique) {
-        return true;
-    }
-
-    QSqlQuery duplicateGroupsQuery(m_database);
-    if (duplicateGroupsQuery.exec(QStringLiteral(R"(
-        SELECT COALESCE(SUM(group_count - 1), 0)
-        FROM (
-            SELECT COUNT(*) AS group_count
-            FROM translations
-            GROUP BY source_text, translated_text, source_lang, target_lang
-            HAVING COUNT(*) > 1
-        )
-    )")) && duplicateGroupsQuery.next()) {
-        m_cleanupStats.removedDuplicates += duplicateGroupsQuery.value(0).toLongLong();
-    }
-
-    if (!m_database.transaction()) {
-        m_lastError = m_database.lastError().text();
-        return false;
-    }
-
-    QSqlQuery query(m_database);
-    const QString frequencyExpression = hasFrequency ? QStringLiteral("COALESCE(frequency, 1)") : QStringLiteral("1");
-    const QStringList migrationStatements = {
-        QStringLiteral("DROP TABLE IF EXISTS translations_frequency_migration"),
-        QStringLiteral(R"(
-            CREATE TABLE translations_frequency_migration (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_text TEXT NOT NULL,
-                translated_text TEXT NOT NULL,
-                source_lang TEXT NOT NULL,
-                target_lang TEXT NOT NULL,
-                frequency INTEGER NOT NULL DEFAULT 1
-            )
-        )"),
-        QStringLiteral(R"(
-            INSERT INTO translations_frequency_migration (source_text, translated_text, source_lang, target_lang, frequency)
-            SELECT source_text, translated_text, source_lang, target_lang, SUM(%1)
-            FROM translations
-            GROUP BY source_text, translated_text, source_lang, target_lang
-        )").arg(frequencyExpression),
-        QStringLiteral("DROP TABLE translations"),
-        QStringLiteral("ALTER TABLE translations_frequency_migration RENAME TO translations")
-    };
-
-    for (const QString &statement : migrationStatements) {
-        if (!query.exec(statement)) {
-            m_lastError = query.lastError().text();
-            m_database.rollback();
-            return false;
-        }
     }
 
     if (!m_database.commit()) {
