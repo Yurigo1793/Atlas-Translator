@@ -22,6 +22,14 @@ constexpr qsizetype MaximumLineLength = 500;
 constexpr qsizetype MinimumLineLength = 2;
 constexpr qint64 ProgressInterval = 10000;
 constexpr qint64 CommitInterval = 10000;
+
+bool isSameNormalizedText(const QString &sourceText, const QString &targetText)
+{
+    static const TextNormalizer normalizer;
+    const QString normalizedSource = normalizer.normalizeForLookup(sourceText);
+    const QString normalizedTarget = normalizer.normalizeForLookup(targetText);
+    return !normalizedSource.isEmpty() && normalizedSource == normalizedTarget;
+}
 }
 
 AtlasImporter::AtlasImporter(const QString &databasePath)
@@ -649,6 +657,10 @@ bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QStr
         static const QRegularExpression tooltipExpression(QStringLiteral(R"(\btooltip\b|tool\s*tip)"),
                                                          QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression filePathExpression(QStringLiteral(R"((?:[A-Za-z]:\\|/\w+/|\.\.?/|\w+/\w+\.\w{1,6}\b))"));
+        static const QRegularExpression emailExpression(QStringLiteral(R"(\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b)"),
+                                                        QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression catalogMetadataExpression(QStringLiteral(R"(unit\s+synonyms\s+for\s+matching\s+user\s+input|amount\s+in\s+units\s*\((?:real|integer)\))"),
+                                                                  QRegularExpression::CaseInsensitiveOption);
 
         return markupExpression.match(text).hasMatch()
             || styleExpression.match(text).hasMatch()
@@ -658,7 +670,9 @@ bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QStr
             || pidExpression.match(text).hasMatch()
             || authorizationExpression.match(text).hasMatch()
             || tooltipExpression.match(text).hasMatch()
-            || filePathExpression.match(text).hasMatch();
+            || filePathExpression.match(text).hasMatch()
+            || emailExpression.match(text).hasMatch()
+            || catalogMetadataExpression.match(text).hasMatch();
     };
 
     auto hasExcessiveSymbols = [](const QString &text) {
@@ -713,6 +727,10 @@ bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QStr
         return false;
     }
 
+    if (isSameNormalizedText(sourceText, targetText)) {
+        return false;
+    }
+
     return !hasTechnicalNoise(sourceText)
         && !hasTechnicalNoise(targetText)
         && !hasExcessiveSymbols(sourceText)
@@ -752,6 +770,10 @@ bool AtlasImporter::isInvalidStoredTranslationPair(const QString &sourceText, co
                                                            QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression tooltipMarkupExpression(QStringLiteral(R"(<[^>]*tooltip|tooltip\s*[:=]\s*['\"<{])"),
                                                                 QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression emailExpression(QStringLiteral(R"(\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b)"),
+                                                        QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression catalogMetadataExpression(QStringLiteral(R"(unit\s+synonyms\s+for\s+matching\s+user\s+input|amount\s+in\s+units\s*\((?:real|integer)\))"),
+                                                                  QRegularExpression::CaseInsensitiveOption);
 
         return htmlXmlExpression.match(text).hasMatch()
             || cssExpression.match(text).hasMatch()
@@ -759,7 +781,9 @@ bool AtlasImporter::isInvalidStoredTranslationPair(const QString &sourceText, co
             || codeExpression.match(text).hasMatch()
             || authSecretExpression.match(text).hasMatch()
             || pidValueExpression.match(text).hasMatch()
-            || tooltipMarkupExpression.match(text).hasMatch();
+            || tooltipMarkupExpression.match(text).hasMatch()
+            || emailExpression.match(text).hasMatch()
+            || catalogMetadataExpression.match(text).hasMatch();
     };
 
     auto hasExcessiveSymbolNoise = [](const QString &text) {
@@ -806,6 +830,10 @@ bool AtlasImporter::isInvalidStoredTranslationPair(const QString &sourceText, co
     };
 
     if (sourceText.trimmed().isEmpty() || targetText.trimmed().isEmpty()) {
+        return true;
+    }
+
+    if (isSameNormalizedText(sourceText, targetText)) {
         return true;
     }
 

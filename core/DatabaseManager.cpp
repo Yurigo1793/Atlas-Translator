@@ -94,7 +94,11 @@ bool DatabaseManager::initialize()
         return false;
     }
 
-    if (!createTables() || !ensureFrequencySchema() || !normalizeStoredLanguages() || !createIndexes()) {
+    if (!createTables()
+        || !removeLegacyUniqueConstraint()
+        || !ensureFrequencySchema()
+        || !normalizeStoredLanguages()
+        || !createIndexes()) {
         return false;
     }
 
@@ -651,12 +655,6 @@ bool DatabaseManager::removeLegacyUniqueConstraint()
 
 bool DatabaseManager::normalizeStoredLanguages()
 {
-    QSqlQuery dropPairUnique(m_database);
-    if (!dropPairUnique.exec(QStringLiteral("DROP INDEX IF EXISTS idx_translations_pair_unique"))) {
-        m_lastError = dropPairUnique.lastError().text();
-        return false;
-    }
-
     QSqlQuery selectQuery(m_database);
     if (!selectQuery.exec(QStringLiteral("SELECT DISTINCT source_lang FROM translations UNION SELECT DISTINCT target_lang FROM translations"))) {
         m_lastError = selectQuery.lastError().text();
@@ -717,10 +715,6 @@ bool DatabaseManager::normalizeStoredLanguages()
             return false;
         }
         targetUpdate.finish();
-    }
-
-    if (!ensureFrequencySchema() || !createIndexes()) {
-        return false;
     }
 
     if (!ensureFrequencySchema() || !createIndexes()) {
