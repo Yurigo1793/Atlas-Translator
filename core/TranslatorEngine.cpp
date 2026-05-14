@@ -109,6 +109,17 @@ bool isAllCapsText(const QString &text)
     return foundLetter;
 }
 
+QStringList sourceWordTokens(const QString &text)
+{
+    QStringList words;
+    static const QRegularExpression tokenExpression(QStringLiteral(R"((\p{L}|\p{N})+[\p{L}\p{N}'’_-]*)"));
+    QRegularExpressionMatchIterator iterator = tokenExpression.globalMatch(text);
+    while (iterator.hasNext()) {
+        words.append(iterator.next().captured(0));
+    }
+    return words;
+}
+
 bool startsWithUppercaseLetter(const QString &text)
 {
     for (const QChar character : text) {
@@ -363,6 +374,8 @@ TranslatorEngine::TranslationResult TranslatorEngine::translateSegment(const QSt
     if (words.isEmpty()) {
         return result;
     }
+    const QStringList originalWords = sourceWordTokens(text);
+    const bool canReuseOriginalWords = originalWords.size() == words.size();
 
     const PhraseMatch completeMatch = findBestMatch(words, 0, sourceLang, targetLang);
     if (completeMatch.found && completeMatch.consumedWords == words.size()) {
@@ -391,7 +404,7 @@ TranslatorEngine::TranslationResult TranslatorEngine::translateSegment(const QSt
             continue;
         }
 
-        translatedParts.append(words.at(position));
+        translatedParts.append(canReuseOriginalWords ? originalWords.at(position) : words.at(position));
         ++position;
     }
 

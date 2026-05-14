@@ -139,10 +139,11 @@ bool importDetectedDataset(QTextStream &in, QTextStream &out)
     AtlasImporter importer;
 
     out << "Importando dataset Moses/OPUS detectado:" << Qt::endl;
-    out << dataset.corpusName << " (" << dataset.sourceLanguage << " -> " << dataset.targetLanguage << ")" << Qt::endl;
+    out << dataset.corpusName << " (" << dataset.sourceLanguage << " <-> " << dataset.targetLanguage << ")" << Qt::endl;
     out << "Origem: " << dataset.sourceFile << Qt::endl;
     out << "Destino: " << dataset.targetFile << Qt::endl;
 
+    out << "Importando sentido direto: " << dataset.sourceLanguage << " -> " << dataset.targetLanguage << Qt::endl;
     if (!importer.importMosesDataset(dataset.sourceFile,
                                      dataset.targetFile,
                                      dataset.sourceLanguage,
@@ -151,7 +152,16 @@ bool importDetectedDataset(QTextStream &in, QTextStream &out)
         return false;
     }
 
-    out << "Importação concluída em: " << importer.databasePath() << Qt::endl;
+    out << "Importando sentido inverso: " << dataset.targetLanguage << " -> " << dataset.sourceLanguage << Qt::endl;
+    if (!importer.importMosesDataset(dataset.targetFile,
+                                     dataset.sourceFile,
+                                     dataset.targetLanguage,
+                                     dataset.sourceLanguage)) {
+        out << "Erro ao importar dataset inverso: " << importer.lastError() << Qt::endl;
+        return false;
+    }
+
+    out << "Importacao bidirecional concluida em: " << importer.databasePath() << Qt::endl;
     return true;
 }
 }
