@@ -14,7 +14,9 @@ O resultado depende diretamente dos pares de texto importados para o banco SQLit
 - Prioriza a maior frase encontrada e usa frequencia para desempatar traducoes repetidas.
 - Usa cache em memoria para reduzir consultas repetidas ao SQLite.
 - Preserva quebras de linha, pontuacao simples, aspas/parenteses e capitalizacao basica.
+- Na saida, a pontuacao vem do texto digitado. Pontuacao suja gravada no dataset nao deve ser inventada na traducao.
 - Mantem palavras sem correspondencia no texto final em vez de inventar uma traducao.
+- Tem um modulo inicial em `core/TranslationOrganizer.*` para futura organizacao por IA ou regras mais avancadas.
 
 ## O que ela nao faz
 
@@ -63,10 +65,11 @@ No menu:
 ```text
 1 - Traduzir texto
 2 - Importar dataset detectado
+3 - Importar todos os datasets detectados
 0 - Sair
 ```
 
-Use a opcao `2` primeiro para importar um dataset. A importacao cadastra automaticamente o sentido direto e o sentido inverso. Depois use a opcao `1` para traduzir usando os pares de idioma disponiveis.
+Use a opcao `2` para importar um dataset especifico ou `3` para importar todos os datasets detectados. A importacao cadastra automaticamente o sentido direto e o sentido inverso. Depois use a opcao `1` para traduzir usando os pares de idioma disponiveis.
 
 ## Resumo tecnico
 

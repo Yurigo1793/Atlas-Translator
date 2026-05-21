@@ -64,6 +64,8 @@ add_executable(AtlasTranslator
     core/QueryCache.h
     core/TextNormalizer.cpp
     core/TextNormalizer.h
+    core/TranslationOrganizer.cpp
+    core/TranslationOrganizer.h
     core/TranslatorEngine.cpp
     core/TranslatorEngine.h
     core/Utf8Streams.h

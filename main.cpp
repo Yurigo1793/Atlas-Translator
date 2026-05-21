@@ -110,32 +110,8 @@ void printDatasets(const QList<DatasetInfo> &datasets, QTextStream &out)
     }
 }
 
-bool importDetectedDataset(QTextStream &in, QTextStream &out)
+bool importDatasetBidirectional(const DatasetInfo &dataset, QTextStream &out)
 {
-    DatasetScanner scanner;
-    out << "Escaneando datasets em: " << scanner.datasetsPath() << Qt::endl;
-    const QList<DatasetInfo> datasets = scanner.scan();
-
-    if (!scanner.lastError().isEmpty()) {
-        out << scanner.lastError() << Qt::endl;
-    }
-
-    printDatasets(datasets, out);
-    if (datasets.isEmpty()) {
-        out << "Coloque arquivos Moses/OPUS na pasta acima e tente novamente." << Qt::endl;
-        return false;
-    }
-
-    out << "Escolha o índice do dataset: " << Qt::flush;
-
-    bool validIndex = false;
-    const int selectedIndex = in.readLine().trimmed().toInt(&validIndex);
-    if (!validIndex || selectedIndex < 0 || selectedIndex >= datasets.size()) {
-        out << "Índice inválido." << Qt::endl;
-        return false;
-    }
-
-    const DatasetInfo &dataset = datasets.at(selectedIndex);
     AtlasImporter importer;
 
     out << "Importando dataset Moses/OPUS detectado:" << Qt::endl;
@@ -163,6 +139,66 @@ bool importDetectedDataset(QTextStream &in, QTextStream &out)
 
     out << "Importacao bidirecional concluida em: " << importer.databasePath() << Qt::endl;
     return true;
+}
+
+bool importDetectedDataset(QTextStream &in, QTextStream &out)
+{
+    DatasetScanner scanner;
+    out << "Escaneando datasets em: " << scanner.datasetsPath() << Qt::endl;
+    const QList<DatasetInfo> datasets = scanner.scan();
+
+    if (!scanner.lastError().isEmpty()) {
+        out << scanner.lastError() << Qt::endl;
+    }
+
+    printDatasets(datasets, out);
+    if (datasets.isEmpty()) {
+        out << "Coloque arquivos Moses/OPUS na pasta acima e tente novamente." << Qt::endl;
+        return false;
+    }
+
+    out << "Escolha o índice do dataset: " << Qt::flush;
+
+    bool validIndex = false;
+    const int selectedIndex = in.readLine().trimmed().toInt(&validIndex);
+    if (!validIndex || selectedIndex < 0 || selectedIndex >= datasets.size()) {
+        out << "Índice inválido." << Qt::endl;
+        return false;
+    }
+
+    const DatasetInfo &dataset = datasets.at(selectedIndex);
+    return importDatasetBidirectional(dataset, out);
+}
+
+bool importAllDetectedDatasets(QTextStream &out)
+{
+    DatasetScanner scanner;
+    out << "Escaneando datasets em: " << scanner.datasetsPath() << Qt::endl;
+    const QList<DatasetInfo> datasets = scanner.scan();
+
+    if (!scanner.lastError().isEmpty()) {
+        out << scanner.lastError() << Qt::endl;
+    }
+
+    printDatasets(datasets, out);
+    if (datasets.isEmpty()) {
+        out << "Coloque arquivos Moses/OPUS na pasta acima e tente novamente." << Qt::endl;
+        return false;
+    }
+
+    qsizetype importedCount = 0;
+    qsizetype failedCount = 0;
+    for (const DatasetInfo &dataset : datasets) {
+        if (importDatasetBidirectional(dataset, out)) {
+            ++importedCount;
+        } else {
+            ++failedCount;
+        }
+    }
+
+    out << "Importacao em lote concluida. Sucesso: " << importedCount
+        << " | Falhas: " << failedCount << Qt::endl;
+    return failedCount == 0;
 }
 }
 
@@ -202,6 +238,7 @@ int main(int argc, char *argv[])
         out << Qt::endl;
         out << "1 - Traduzir texto" << Qt::endl;
         out << "2 - Importar dataset detectado" << Qt::endl;
+        out << "3 - Importar todos os datasets detectados" << Qt::endl;
         out << "0 - Sair" << Qt::endl;
         out << "Opção: " << Qt::flush;
 
@@ -214,6 +251,14 @@ int main(int argc, char *argv[])
             importDetectedDataset(in, out);
             if (!translator.initialize()) {
                 out << "Erro ao recarregar banco após importação: " << translator.lastError() << Qt::endl;
+            } else {
+                translator.printDatabaseSummary(out);
+            }
+        } else if (option == QStringLiteral("3")) {
+            translator.shutdown();
+            importAllDetectedDatasets(out);
+            if (!translator.initialize()) {
+                out << "Erro ao recarregar banco apos importacao: " << translator.lastError() << Qt::endl;
             } else {
                 translator.printDatabaseSummary(out);
             }

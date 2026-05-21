@@ -2,6 +2,7 @@
 #define ATLASIMPORTER_H
 
 #include "LanguageNormalizer.h"
+#include "TranslationOrganizer.h"
 
 #include <QSqlDatabase>
 #include <QString>
@@ -50,12 +51,6 @@ private:
     bool removeLegacyUniqueConstraint();
     bool ensureProgressTable();
     bool prepareInsertStatement(QSqlQuery &query);
-    bool preparePairExistsStatement(QSqlQuery &query);
-    bool translationPairExists(QSqlQuery &query,
-                               const QString &sourceText,
-                               const QString &targetText,
-                               const QString &sourceLang,
-                               const QString &targetLang);
     bool isValidTranslationPair(const QString &sourceText, const QString &targetText) const;
     bool isInvalidStoredTranslationPair(const QString &sourceText, const QString &targetText) const;
     bool cleanupDatabase();
@@ -85,6 +80,7 @@ private:
     ImportStats m_stats;
     CleanupStats m_cleanupStats;
     LanguageNormalizer m_languageNormalizer;
+    TranslationOrganizer m_translationOrganizer;
 };
 
 #endif // ATLASIMPORTER_H
