@@ -22,6 +22,7 @@ constexpr qsizetype MaximumLineLength = 500;
 constexpr qsizetype MinimumLineLength = 2;
 constexpr qint64 ProgressInterval = 10000;
 constexpr qint64 CommitInterval = 50000;
+constexpr qsizetype MaximumImportWords = 8;
 
 bool isSameNormalizedText(const QString &sourceText, const QString &targetText)
 {
@@ -673,6 +674,12 @@ bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QStr
     }
 
     if (sourceText.size() < MinimumLineLength || targetText.size() < MinimumLineLength) {
+        return false;
+    }
+
+    const QStringList sourceWords = sourceText.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    const QStringList targetWords = targetText.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    if (sourceWords.size() > MaximumImportWords || targetWords.size() > MaximumImportWords) {
         return false;
     }
 
