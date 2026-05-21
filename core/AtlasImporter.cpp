@@ -21,7 +21,7 @@ namespace {
 constexpr qsizetype MaximumLineLength = 500;
 constexpr qsizetype MinimumLineLength = 2;
 constexpr qint64 ProgressInterval = 10000;
-constexpr qint64 CommitInterval = 10000;
+constexpr qint64 CommitInterval = 50000;
 
 bool isSameNormalizedText(const QString &sourceText, const QString &targetText)
 {
@@ -130,11 +130,6 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
         return false;
     }
 
-    QSqlQuery pairExistsQuery(m_database);
-    if (!preparePairExistsStatement(pairExistsQuery)) {
-        return false;
-    }
-
     if (!m_database.transaction()) {
         m_lastError = m_database.lastError().text();
         return false;
@@ -151,19 +146,18 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
         if (!isValidTranslationPair(sourceText, targetText)) {
             ++m_stats.ignoredLines;
         } else {
-            const QString normalizedSource = normalizedSourceText(sourceText);
-            const bool existingPair = translationPairExists(pairExistsQuery,
-                                                            normalizedSource,
-                                                            targetText,
-                                                            normalizedSourceLang,
-                                                            normalizedTargetLang);
-            if (!m_lastError.isEmpty()) {
-                success = false;
-                break;
+            const TranslationOrganizer::PairDecision decision = m_translationOrganizer.organizePair(sourceText,
+                                                                                                    targetText,
+                                                                                                    normalizedSourceLang,
+                                                                                                    normalizedTargetLang);
+            if (!decision.accepted) {
+                ++m_stats.ignoredLines;
+                continue;
             }
 
+            const QString normalizedSource = normalizedSourceText(decision.sourceText);
             insertQuery.bindValue(QStringLiteral(":source_text"), normalizedSource);
-            insertQuery.bindValue(QStringLiteral(":translated_text"), targetText);
+            insertQuery.bindValue(QStringLiteral(":translated_text"), decision.targetText);
             insertQuery.bindValue(QStringLiteral(":source_lang"), normalizedSourceLang);
             insertQuery.bindValue(QStringLiteral(":target_lang"), normalizedTargetLang);
 
@@ -173,12 +167,7 @@ bool AtlasImporter::importMosesDataset(const QString &sourceFilePath,
                 break;
             }
 
-            if (existingPair) {
-                ++m_stats.updatedFrequencyLines;
-                ++m_stats.duplicateLines;
-            } else {
-                ++m_stats.insertedLines;
-            }
+            ++m_stats.insertedLines;
         }
 
         if ((m_stats.processedLines % ProgressInterval) == 0) {
@@ -597,46 +586,6 @@ bool AtlasImporter::prepareInsertStatement(QSqlQuery &query)
     return true;
 }
 
-
-bool AtlasImporter::preparePairExistsStatement(QSqlQuery &query)
-{
-    if (!query.prepare(QStringLiteral(R"(
-        SELECT 1
-        FROM translations
-        WHERE source_text = :source_text
-          AND translated_text = :translated_text
-          AND source_lang = :source_lang
-          AND target_lang = :target_lang
-        LIMIT 1
-    )"))) {
-        m_lastError = query.lastError().text();
-        return false;
-    }
-
-    return true;
-}
-
-bool AtlasImporter::translationPairExists(QSqlQuery &query,
-                                          const QString &sourceText,
-                                          const QString &targetText,
-                                          const QString &sourceLang,
-                                          const QString &targetLang)
-{
-    m_lastError.clear();
-    query.bindValue(QStringLiteral(":source_text"), sourceText);
-    query.bindValue(QStringLiteral(":translated_text"), targetText);
-    query.bindValue(QStringLiteral(":source_lang"), sourceLang);
-    query.bindValue(QStringLiteral(":target_lang"), targetLang);
-
-    if (!query.exec()) {
-        m_lastError = query.lastError().text();
-        return false;
-    }
-
-    const bool exists = query.next();
-    query.finish();
-    return exists;
-}
 
 bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QString &targetText) const
 {

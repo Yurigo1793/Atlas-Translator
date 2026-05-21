@@ -158,6 +158,69 @@ QString applyCapitalization(const QString &source, const QString &translation)
     return translation;
 }
 
+bool isIntraWordMark(const QString &text, qsizetype index)
+{
+    const QChar character = text.at(index);
+    if (character != QLatin1Char('\'') && character != QLatin1Char('-') && character != QChar(0x2019)) {
+        return false;
+    }
+
+    return index > 0
+        && (index + 1) < text.size()
+        && text.at(index - 1).isLetterOrNumber()
+        && text.at(index + 1).isLetterOrNumber();
+}
+
+QString cleanStoredTranslationForSource(const QString &source, const QString &translation)
+{
+    QString cleaned;
+    cleaned.reserve(translation.size());
+
+    for (qsizetype index = 0; index < translation.size(); ++index) {
+        const QChar character = translation.at(index);
+        if (character.isLetterOrNumber() || character.isSpace() || isIntraWordMark(translation, index)) {
+            cleaned.append(character);
+        } else {
+            cleaned.append(QLatin1Char(' '));
+        }
+    }
+
+    cleaned.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+    cleaned = cleaned.trimmed();
+    return cleaned.isEmpty() && !translation.trimmed().isEmpty() ? source : cleaned;
+}
+
+QString applySourceSeparators(const QString &source, const QString &translation)
+{
+    QStringList translatedWords = translation.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    if (translatedWords.isEmpty()) {
+        return translation;
+    }
+
+    static const QRegularExpression wordExpression(QStringLiteral(R"((\p{L}|\p{N})+[\p{L}\p{N}'â€™_-]*)"));
+    QList<QRegularExpressionMatch> sourceWordMatches;
+    QRegularExpressionMatchIterator iterator = wordExpression.globalMatch(source);
+    while (iterator.hasNext()) {
+        sourceWordMatches.append(iterator.next());
+    }
+
+    if (sourceWordMatches.size() != translatedWords.size()) {
+        return translation;
+    }
+
+    QString rebuilt = source.left(sourceWordMatches.first().capturedStart());
+    for (qsizetype index = 0; index < sourceWordMatches.size(); ++index) {
+        rebuilt.append(translatedWords.at(index));
+        const qsizetype separatorStart = sourceWordMatches.at(index).capturedEnd();
+        const qsizetype separatorEnd = (index + 1) < sourceWordMatches.size()
+            ? sourceWordMatches.at(index + 1).capturedStart()
+            : source.size();
+        rebuilt.append(source.mid(separatorStart, separatorEnd - separatorStart));
+    }
+
+    return rebuilt;
+}
+
 QStringList inlinePunctuationMarks(const QString &source)
 {
     QStringList marks;
@@ -191,8 +254,7 @@ QString leadingWrappers(const QString &text)
         if (character.isSpace()) {
             continue;
         }
-        if (character == QLatin1Char('"') || character == QLatin1Char('(') || character == QLatin1Char('[')
-            || character == QLatin1Char('{') || character == QLatin1Char('\'')) {
+        if (!character.isLetterOrNumber()) {
             wrappers.append(character);
             continue;
         }
@@ -209,8 +271,7 @@ QString trailingWrappers(const QString &text)
         if (character.isSpace()) {
             continue;
         }
-        if (character == QLatin1Char('"') || character == QLatin1Char(')') || character == QLatin1Char(']')
-            || character == QLatin1Char('}') || character == QLatin1Char('\'')) {
+        if (!character.isLetterOrNumber()) {
             wrappers.prepend(character);
             continue;
         }
@@ -379,7 +440,7 @@ TranslatorEngine::TranslationResult TranslatorEngine::translateSegment(const QSt
 
     const PhraseMatch completeMatch = findBestMatch(words, 0, sourceLang, targetLang);
     if (completeMatch.found && completeMatch.consumedWords == words.size()) {
-        result.translation = completeMatch.translation;
+        result.translation = applySourceSeparators(text, cleanStoredTranslationForSource(text, completeMatch.translation));
         result.matchedText = completeMatch.matchedText;
         result.matchType = QStringLiteral("full");
         result.consumedWords = completeMatch.consumedWords;
@@ -393,7 +454,7 @@ TranslatorEngine::TranslationResult TranslatorEngine::translateSegment(const QSt
     for (qsizetype position = 0; position < words.size();) {
         const PhraseMatch match = findBestMatch(words, position, sourceLang, targetLang);
         if (match.found) {
-            translatedParts.append(match.translation);
+            translatedParts.append(cleanStoredTranslationForSource(match.matchedText, match.translation));
             if (result.matchType == QStringLiteral("none")) {
                 result.matchedText = match.matchedText;
                 result.matchType = match.matchType;

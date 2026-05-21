@@ -36,7 +36,9 @@ private:
 
     QString resolveDatasetsPath(const QString &datasetsPath) const;
     bool parseCandidate(const QFileInfo &fileInfo, CandidateFile &candidate) const;
+    bool parseLanguagePair(const QString &langPair, QString &sourceLanguage, QString &targetLanguage) const;
     bool isKnownLanguageToken(const QString &language) const;
+    QString normalizedLanguageToken(const QString &language) const;
     bool isCoherentPair(const CandidateFile &sourceCandidate,
                         const CandidateFile &targetCandidate) const;
     bool hasReadableContent(const QString &filePath) const;

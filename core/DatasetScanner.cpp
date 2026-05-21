@@ -4,6 +4,7 @@
 #include "AppPaths.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -38,10 +39,13 @@ QList<DatasetInfo> DatasetScanner::scan()
         return datasets;
     }
 
-    const QFileInfoList files = datasetsDirectory.entryInfoList(QDir::Files | QDir::Readable, QDir::Name);
     QHash<QString, QList<CandidateFile>> candidatesByPair;
 
-    for (const QFileInfo &fileInfo : files) {
+    QDirIterator iterator(m_datasetsPath,
+                          QDir::Files | QDir::Readable,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        const QFileInfo fileInfo(iterator.next());
         CandidateFile candidate;
         if (!parseCandidate(fileInfo, candidate)) {
             continue;
@@ -63,14 +67,11 @@ QList<DatasetInfo> DatasetScanner::scan()
             continue;
         }
 
-        const QString langPair = keyParts.at(1);
-        const int separatorIndex = langPair.indexOf(QLatin1Char('-'));
-        if (separatorIndex <= 0 || separatorIndex >= langPair.size() - 1) {
+        QString sourceLanguage;
+        QString targetLanguage;
+        if (!parseLanguagePair(keyParts.at(1), sourceLanguage, targetLanguage)) {
             continue;
         }
-
-        const QString sourceLanguage = langPair.left(separatorIndex);
-        const QString targetLanguage = langPair.mid(separatorIndex + 1);
         CandidateFile sourceCandidate;
         CandidateFile targetCandidate;
         bool foundSource = false;
@@ -103,11 +104,10 @@ QList<DatasetInfo> DatasetScanner::scan()
         }
 
         emittedDatasets.insert(datasetKey);
-        const LanguageNormalizer languageNormalizer;
         datasets.append(DatasetInfo{
             sourceCandidate.corpusName,
-            languageNormalizer.normalize(sourceLanguage),
-            languageNormalizer.normalize(targetLanguage),
+            sourceLanguage,
+            targetLanguage,
             sourceCandidate.filePath,
             targetCandidate.filePath
         });
@@ -155,7 +155,7 @@ bool DatasetScanner::parseCandidate(const QFileInfo &fileInfo, CandidateFile &ca
         return false;
     }
 
-    const QString language = fileInfo.suffix();
+    const QString language = normalizedLanguageToken(fileInfo.suffix());
     if (!isKnownLanguageToken(language)) {
         return false;
     }
@@ -168,13 +168,12 @@ bool DatasetScanner::parseCandidate(const QFileInfo &fileInfo, CandidateFile &ca
 
     const QString corpusName = baseName.left(langPairSeparator);
     const QString langPair = baseName.mid(langPairSeparator + 1);
-    const int pairSeparator = langPair.indexOf(QLatin1Char('-'));
-    if (pairSeparator <= 0 || pairSeparator >= langPair.size() - 1) {
+
+    QString sourceLanguage;
+    QString targetLanguage;
+    if (!parseLanguagePair(langPair, sourceLanguage, targetLanguage)) {
         return false;
     }
-
-    const QString sourceLanguage = langPair.left(pairSeparator);
-    const QString targetLanguage = langPair.mid(pairSeparator + 1);
     if (language != sourceLanguage && language != targetLanguage) {
         return false;
     }
@@ -195,10 +194,35 @@ bool DatasetScanner::parseCandidate(const QFileInfo &fileInfo, CandidateFile &ca
     return true;
 }
 
+bool DatasetScanner::parseLanguagePair(const QString &langPair, QString &sourceLanguage, QString &targetLanguage) const
+{
+    for (qsizetype index = 1; index < langPair.size() - 1; ++index) {
+        if (langPair.at(index) != QLatin1Char('-')) {
+            continue;
+        }
+
+        const QString sourceCandidate = normalizedLanguageToken(langPair.left(index));
+        const QString targetCandidate = normalizedLanguageToken(langPair.mid(index + 1));
+        if (isKnownLanguageToken(sourceCandidate) && isKnownLanguageToken(targetCandidate)) {
+            sourceLanguage = sourceCandidate;
+            targetLanguage = targetCandidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool DatasetScanner::isKnownLanguageToken(const QString &language) const
 {
     static const QRegularExpression languageExpression(QStringLiteral("^[A-Za-z]{2,3}(?:_[A-Za-z0-9]{2,8})?$"));
     return languageExpression.match(language).hasMatch();
+}
+
+QString DatasetScanner::normalizedLanguageToken(const QString &language) const
+{
+    const LanguageNormalizer languageNormalizer;
+    return languageNormalizer.normalize(language);
 }
 
 bool DatasetScanner::isCoherentPair(const CandidateFile &sourceCandidate,

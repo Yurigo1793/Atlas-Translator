@@ -29,11 +29,9 @@ QString TextNormalizer::normalizeForLookup(const QString &text) const
     normalized.replace(QRegularExpression(QStringLiteral("\\b(\\w+)'d\\b")), QStringLiteral("\\1 would"));
     normalized.replace(QRegularExpression(QStringLiteral("\\b(\\w+)'s\\b")), QStringLiteral("\\1"));
 
-    // Pontuação leve é ignorada no índice de busca. Acentos, UTF-8 e pontuação
-    // estrutural (por exemplo '/', '+', '#') são preservados. Hífens também geram
-    // espaços para permitir correspondência entre "open-source" e "open source".
-    normalized.replace(QRegularExpression(QStringLiteral("[\\.,;:!?\\(\\)\\[\\]\\{\\}\\\"']")), QStringLiteral(" "));
-    normalized.replace(QRegularExpression(QStringLiteral("(?<=\\p{L})-(?=\\p{L})")), QStringLiteral(" "));
+    // Lookup e feito por palavras: qualquer pontuacao, simbolo ou separador
+    // visual vira espaco para nao bloquear correspondencias.
+    normalized.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}]+")), QStringLiteral(" "));
 
     return normalizeWhitespace(normalized);
 }
