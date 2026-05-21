@@ -10,7 +10,7 @@ O resultado depende diretamente dos pares de texto importados para o banco SQLit
 - Ao importar um par, grava os dois sentidos no banco, por exemplo `en -> pt_BR` e `pt_BR -> en`.
 - Salva os pares de traducao em `database/atlas.db`.
 - Normaliza texto e codigos de idioma antes da busca.
-- Procura a melhor correspondencia no banco usando frases de ate 12 palavras.
+- Procura a melhor correspondencia no banco usando frases de ate 8 palavras.
 - Prioriza a maior frase encontrada e usa frequencia para desempatar traducoes repetidas.
 - Usa cache em memoria para reduzir consultas repetidas ao SQLite.
 - Preserva quebras de linha, pontuacao simples, aspas/parenteses e capitalizacao basica.
