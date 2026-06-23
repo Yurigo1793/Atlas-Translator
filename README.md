@@ -63,8 +63,17 @@ database it can find. The main menu includes:
 0 - Exit
 ```
 
-Import options scan `datasets/`, filter supported language pairs, and create or
-update Atlas SQLite databases under `database/`.
+- Importa datasets paralelos no formato Moses/OPUS a partir da pasta `datasets`.
+- Ao importar um par, grava os dois sentidos no banco, por exemplo `en -> pt_BR` e `pt_BR -> en`.
+- Salva os pares de traducao em `database/atlas.db`.
+- Normaliza texto e codigos de idioma antes da busca.
+- Procura a melhor correspondencia no banco usando frases de ate 8 palavras.
+- Prioriza a maior frase encontrada e usa frequencia para desempatar traducoes repetidas.
+- Usa cache em memoria para reduzir consultas repetidas ao SQLite.
+- Preserva quebras de linha, pontuacao simples, aspas/parenteses e capitalizacao basica.
+- Na saida, a pontuacao vem do texto digitado. Pontuacao suja gravada no dataset nao deve ser inventada na traducao.
+- Mantem palavras sem correspondencia no texto final em vez de inventar uma traducao.
+- Tem um modulo inicial em `core/TranslationOrganizer.*` para futura organizacao por IA ou regras mais avancadas.
 
 ## Build
 

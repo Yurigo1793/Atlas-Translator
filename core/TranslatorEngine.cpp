@@ -754,7 +754,7 @@ TranslatorEngine::PhraseMatch TranslatorEngine::findBestMatch(const QStringList 
     QStringList missingCandidates;
     QHash<QString, QString> availableTranslations;
 
-    constexpr qsizetype MaximumPhraseWords = 12;
+    constexpr qsizetype MaximumPhraseWords = 8;
     const qsizetype maxLength = qMin(MaximumPhraseWords, words.size() - position);
     for (qsizetype length = maxLength; length > 0; --length) {
         const QStringList slice = words.mid(position, length);

@@ -30,92 +30,7 @@ constexpr qsizetype MaximumLineLength = 500;
 constexpr qint64 ProgressInterval = 10000;
 constexpr qint64 PreprocessReportInterval = 100000;
 constexpr qint64 CommitInterval = 50000;
-constexpr qint64 MaximumQualityWarningsPerImport = 5000;
-constexpr qint64 RejectedSummarySnapshotInterval = 100000;
-constexpr qsizetype MaximumPunctuationSplitSegmentWords = 8;
-
-struct PunctuationSplitResult {
-    bool shouldReport = false;
-    QString skipReason;
-    QList<QPair<QString, QString>> segments;
-};
-
-bool isSameNormalizedText(const QString &sourceText, const QString &targetText);
-qsizetype normalizedWordCount(const QString &text);
-bool looksLikeDesktopMetadata(const QString &text);
-bool hasSameTextFlag(const QStringList &flags);
-bool hasAcceptedSameTextFlag(const QStringList &flags);
-bool hasSameProperNameFlag(const QStringList &flags);
-
-struct OpusPreprocessDecision {
-    QString sourceClean;
-    QString targetClean;
-    QStringList flags;
-    qsizetype sourceWords = 0;
-    qsizetype targetWords = 0;
-    int qualityScore = 100;
-    QString importBucket;
-};
-
-struct OpusAlignmentLink {
-    QString fromDoc;
-    QString toDoc;
-    QString alignment;
-    bool valid = false;
-};
-
-struct OpusIdsRow {
-    QString raw;
-    QString fromDoc;
-    QString toDoc;
-    QString sourceId;
-    QString targetId;
-    bool valid = false;
-};
-
-struct OpusPreprocessRejectExample {
-    QString reason;
-    qint64 line = 0;
-    QString sourceText;
-    QString targetText;
-    QString sourceClean;
-    QString targetClean;
-    QString flags;
-    QString bucket;
-    int qualityScore = 0;
-    QString xmlFromDoc;
-    QString xmlToDoc;
-    QString xmlAlignment;
-    QString idsRaw;
-    QString idsFromDoc;
-    QString idsToDoc;
-    QString idsSourceId;
-    QString idsTargetId;
-};
-
-struct MediaWikiPreprocessRejectExample {
-    QString reason;
-    qint64 page = 0;
-    QString title;
-    QString sourceLanguage;
-    QString targetLanguage;
-    QString line;
-    QString translation;
-    QString gloss;
-};
-
-class OpusAlignmentReader
-{
-public:
-    explicit OpusAlignmentReader(const QString &xmlFilePath)
-        : m_file(xmlFilePath)
-        , m_xml(&m_file)
-    {
-        if (xmlFilePath.isEmpty() || !QFileInfo::exists(xmlFilePath)) {
-            return;
-        }
-        m_available = m_file.open(QIODevice::ReadOnly | QIODevice::Text);
-    }
+constexpr qsizetype MaximumImportWords = 8;
 
     bool isAvailable() const
     {
@@ -5630,6 +5545,16 @@ bool AtlasImporter::isValidTranslationPair(const QString &sourceText, const QStr
     }
 
     if (sourceText.size() > MaximumLineLength || targetText.size() > MaximumLineLength) {
+        return false;
+    }
+
+    if (sourceText.size() < MinimumLineLength || targetText.size() < MinimumLineLength) {
+        return false;
+    }
+
+    const QStringList sourceWords = sourceText.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    const QStringList targetWords = targetText.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    if (sourceWords.size() > MaximumImportWords || targetWords.size() > MaximumImportWords) {
         return false;
     }
 
