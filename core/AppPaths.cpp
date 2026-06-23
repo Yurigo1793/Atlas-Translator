@@ -26,6 +26,13 @@ bool hasDatasetFiles(const QString &path)
         }
     }
 
+    const QFileInfoList directories = directory.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable);
+    for (const QFileInfo &directoryInfo : directories) {
+        if (hasDatasetFiles(directoryInfo.absoluteFilePath())) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -59,9 +66,9 @@ QString AppPaths::datasetsPath()
         return QDir::cleanPath(environmentPath);
     }
 
-    const QString applicationDatasetsPath = makePath(QStringLiteral("datasets"));
-    if (hasDatasetFiles(applicationDatasetsPath)) {
-        return applicationDatasetsPath;
+    const QString datasetsFromCurrentPath = findDatasetsPathFrom(QDir::currentPath());
+    if (!datasetsFromCurrentPath.isEmpty()) {
+        return datasetsFromCurrentPath;
     }
 
     const QString datasetsFromApplicationPath = findDatasetsPathFrom(QCoreApplication::applicationDirPath());
@@ -69,9 +76,9 @@ QString AppPaths::datasetsPath()
         return datasetsFromApplicationPath;
     }
 
-    const QString datasetsFromCurrentPath = findDatasetsPathFrom(QDir::currentPath());
-    if (!datasetsFromCurrentPath.isEmpty()) {
-        return datasetsFromCurrentPath;
+    const QString applicationDatasetsPath = makePath(QStringLiteral("datasets"));
+    if (hasDatasetFiles(applicationDatasetsPath)) {
+        return applicationDatasetsPath;
     }
 
     return applicationDatasetsPath;
@@ -82,22 +89,22 @@ QString AppPaths::databasePath()
     return makePath(QStringLiteral("database"));
 }
 
-QString AppPaths::databaseFile()
+QString AppPaths::preprocessProgressPath()
 {
-    return QDir::cleanPath(QDir(databasePath()).filePath(QStringLiteral("atlas.db")));
+    return makePath(QStringLiteral("preprocess_progress"));
 }
 
 bool AppPaths::ensureRequiredDirectories(QString *errorMessage)
 {
     const QStringList requiredPaths = {
-        datasetsPath(),
-        databasePath()
+        databasePath(),
+        preprocessProgressPath()
     };
 
     for (const QString &path : requiredPaths) {
         if (!QDir().mkpath(path)) {
             if (errorMessage != nullptr) {
-                *errorMessage = QStringLiteral("Não foi possível criar o diretório: %1").arg(path);
+                *errorMessage = QStringLiteral("Nao foi possivel criar diretorio: %1").arg(path);
             }
             return false;
         }

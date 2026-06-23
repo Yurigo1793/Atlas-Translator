@@ -1,0 +1,6 @@
+2026/06/23-10:58:42.916 64c Reusing MANIFEST C:\Atlas-Translator\external_tools\google_official_lab\chrome_logged_profile\Default\Sync Data\LevelDB/MANIFEST-000001
+2026/06/23-10:58:42.923 64c Recovering log #7
+2026/06/23-10:58:42.929 64c Reusing old log C:\Atlas-Translator\external_tools\google_official_lab\chrome_logged_profile\Default\Sync Data\LevelDB/000007.log 
+2026/06/23-11:10:07.191 64c Level-0 table #11: started
+2026/06/23-11:10:07.197 64c Level-0 table #11: 60706 bytes OK
+2026/06/23-11:10:07.200 64c Delete type=0 #7

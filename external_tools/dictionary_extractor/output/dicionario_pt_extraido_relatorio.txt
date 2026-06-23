@@ -1,0 +1,44 @@
+ATLAS - EXTRACAO DE DICIONARIO PDF
+
+PDF: C:\Atlas-Translator\external_tools\dicionario-pt.pdf
+TSV: C:\Atlas-Translator\external_tools\dictionary_extractor\output\dicionario_pt_extraido.tsv
+Entradas extraidas: 127021
+Tempo total: 121.16s
+
+Marcas / abreviacoes:
+TSV: C:\Atlas-Translator\external_tools\dictionary_extractor\output\dicionario_pt_extraido_marcas_abreviacoes.tsv
+Abreviacoes de referencia: 269
+Linhas com marcas alem da classe: 81488
+Linhas sem marcas: 173
+
+Exemplos:
+a. | abrev. | De autor.
+a | m. | Primeira letra do alphabeto português. * Mús. Primeira nota da escala na denominação alphabética dos sons. Adj. Primeiro, (falando-se de um número ou de um objecto que faz parte de
+a | art. | (fem. de o). Ant. la. (Do lat. illa).
+a | prep. | Que indica várias relações. (Lat. ad).
+a | pron. | Flexão fem. do pron. o.
+á |  | .
+á | interj. | O mesmo que ah!.
+a. C. | abrev. | (que acompanha certas datas, significando: antes de Christo)
+á cêrca | loc. prep. | (seg. da prep. de) A respeito de; relativamente a; sôbre. (Do lat. circa)
+a final | adv. | Em-fim, finalmente. (De final)
+a. m. | abrev. | muito us. em cálculos astronómicos, e que designa ante meridiem, (antes do meio dia).
+á! | interj. | (design. de admiração, dôr, alegria, etc.) (T. commum a muitas línguas)
+á! á! á! | interj. | (correspondente ao riso franco, á gargalhada)
+a-cantaros | loc. adv. | Copiosamente, com abundância.
+á-cima | loc. adv. | Ant. Por fim, afinal.
+á-clara | f. | Loc. adv. Des. O mesmo que ás-claras.
+a-d’el-rei | m. | Grito de soccorro, o mesmo que aqui-d’el-rei: “os a-d’el-reis rara noite se não ouviam”. Camillo, Cavar em Ruin., 222.
+a-de-mais | adv. e prep. | Além. Demais.
+á-derradeira | loc. adv. | Ant. Em-fim, a final.
+a-deshoras | loc. adv. | Tarde. Inopportunamente.
+a-desoras | loc. adv. | Tarde. Inopportunamente.
+á-dica | loc. adv. | Gír. Perto. Donde se vê bem. (Cp. adicar)
+a-feito | loc. adv. | Prov. minh. A eito, a fio, seguidamente.
+a-flux | loc. adv. | Em abundância. Totalmente. (De fluxo)
+a-froixo | adv. | O mesmo que a-flux.
+á-futelifate | loc. adv. | Prov. extrem. Des. Furtivamente, subrepticiamente, ás escondidas. (Dizem sêr talvez contr. e alter. de furta-lhe o fato)
+a-l’obra! | interj. | loc. Mãos á obra! Trabalhemos! Cf. Castilho, Fausto, 197. (Contr. de a la obra)
+a-la-grande | loc. adv. | Ant. Á grande, com grandeza; ostentosamente. Cf. Filinto, D. Manuel, III, 212.
+a-la-una | adv. | Á uma. Juntamente. * M. Prov. alent. Jôgo de rapazes, em que se emprega o salto e certos estribilhos. (Loc. cast.)
+a-lugares | loc. adv. | Ant. Parcialmente.

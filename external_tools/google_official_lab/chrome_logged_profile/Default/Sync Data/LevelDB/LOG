@@ -1,0 +1,21 @@
+2026/06/23-11:35:27.177 1b04 Reusing MANIFEST C:\Atlas-Translator\external_tools\google_official_lab\chrome_logged_profile\Default\Sync Data\LevelDB/MANIFEST-000001
+2026/06/23-11:35:27.177 1b04 Recovering log #10
+2026/06/23-11:35:27.178 1b04 Reusing old log C:\Atlas-Translator\external_tools\google_official_lab\chrome_logged_profile\Default\Sync Data\LevelDB/000010.log 
+2026/06/23-12:12:29.090 3218 Level-0 table #14: started
+2026/06/23-12:12:29.096 3218 Level-0 table #14: 54533 bytes OK
+2026/06/23-12:12:29.099 3218 Delete type=0 #10
+2026/06/23-13:06:55.383 c8c Level-0 table #16: started
+2026/06/23-13:06:55.387 c8c Level-0 table #16: 55306 bytes OK
+2026/06/23-13:06:55.393 c8c Delete type=0 #13
+2026/06/23-14:02:40.936 1b04 Level-0 table #18: started
+2026/06/23-14:02:40.941 1b04 Level-0 table #18: 58083 bytes OK
+2026/06/23-14:02:40.944 1b04 Delete type=0 #15
+2026/06/23-14:02:40.944 1b04 Compacting 4@0 + 1@1 files
+2026/06/23-14:02:40.950 1b04 Generated table #19@0: 17 keys, 4118 bytes
+2026/06/23-14:02:40.950 1b04 Compacted 4@0 + 1@1 files => 4118 bytes
+2026/06/23-14:02:40.952 1b04 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/06/23-14:02:40.952 1b04 Delete type=2 #8
+2026/06/23-14:02:40.952 1b04 Delete type=2 #11
+2026/06/23-14:02:40.952 1b04 Delete type=2 #14
+2026/06/23-14:02:40.952 1b04 Delete type=2 #16
+2026/06/23-14:02:40.952 1b04 Delete type=2 #18

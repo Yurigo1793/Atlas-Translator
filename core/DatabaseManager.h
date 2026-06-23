@@ -66,9 +66,11 @@ private:
     bool createIndexes();
     bool ensureLookupIndex();
     bool ensureFrequencySchema();
+    bool ensureTranslationMetadataSchema();
     bool removeLegacyUniqueConstraint();
     bool normalizeStoredLanguages();
     bool tableExists(const QString &tableName) const;
+    bool discoverPeerDatabases();
 
     QString normalizedText(const QString &text) const;
     void recordSqlQueryTime(qint64 elapsedNs) const;
@@ -79,6 +81,7 @@ private:
     mutable QString m_lastError;
     LanguageNormalizer m_languageNormalizer;
     mutable SqlStatistics m_sqlStatistics;
+    QStringList m_peerDatabasePaths;
 };
 
 #endif // DATABASEMANAGER_H

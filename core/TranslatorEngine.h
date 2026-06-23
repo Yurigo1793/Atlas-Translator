@@ -3,6 +3,7 @@
 
 #include "DatabaseManager.h"
 #include "LanguageNormalizer.h"
+#include "NeuralTranslator.h"
 #include "QueryCache.h"
 #include "TextNormalizer.h"
 #include "Tokenizer.h"
@@ -21,6 +22,8 @@ public:
     struct Statistics {
         qint64 cacheHits = 0;
         qint64 cacheMisses = 0;
+        qint64 neuralTranslations = 0;
+        qint64 neuralFailures = 0;
         qint64 totalTranslations = 0;
         qint64 totalTranslationTimeNs = 0;
     };
@@ -31,6 +34,8 @@ public:
         QString matchedText;
         QString matchType = QStringLiteral("none");
         qsizetype consumedWords = 0;
+        qint64 matchesFound = 0;
+        qint64 unknownWords = 0;
         qint64 translationTimeNs = 0;
     };
 
@@ -88,6 +93,7 @@ private:
     Tokenizer m_tokenizer;
     TextNormalizer m_normalizer;
     LanguageNormalizer m_languageNormalizer;
+    NeuralTranslator m_neuralTranslator;
     mutable QueryCache m_translationCache;
     mutable Statistics m_statistics;
     bool m_debugEnabled = false;

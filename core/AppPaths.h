@@ -9,7 +9,7 @@ public:
     static QString basePath();
     static QString datasetsPath();
     static QString databasePath();
-    static QString databaseFile();
+    static QString preprocessProgressPath();
     static bool ensureRequiredDirectories(QString *errorMessage = nullptr);
 };
 
